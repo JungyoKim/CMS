@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	%sveltekit.head%
+	<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+	<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+	<!-- Fallback/Mobile Icon (Prioritized for compatibility) -->
+	<link rel="icon" type="image/png" href="%sveltekit.assets%/apple-touch-icon.png?v=7" sizes="180x180" />
+	<script id="desktop-favicon-placeholder"></script>
+
+	<link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png?v=3" />
+	<meta name="apple-mobile-web-app-title" content="CMS" />
+	<link rel="manifest" href="%sveltekit.assets%/site.webmanifest?v=3" />
+	<meta property="og:image" content="%sveltekit.assets%/ogimage.png?v=3" />
+</head>
+
+<body data-sveltekit-preload-data="hover">
+	<div style="display: contents">%sveltekit.body%</div>
+</body>
+<style>
+	::view-transition {
+		pointer-events: none;
+	}
+</style>
+
+</html>

@@ -1,0 +1,26 @@
+CREATE INDEX `as_contract_id_idx` ON `as_records` (`CONTRACT_ID`);--> statement-breakpoint
+CREATE INDEX `as_client_id_idx` ON `as_records` (`CLIENT_ID`);--> statement-breakpoint
+CREATE INDEX `as_request_date_idx` ON `as_records` (`request_date`);--> statement-breakpoint
+CREATE INDEX `as_is_completed_idx` ON `as_records` (`is_completed`);--> statement-breakpoint
+CREATE INDEX `clients_name1_idx` ON `clients` (`name1`);--> statement-breakpoint
+CREATE INDEX `clients_name2_idx` ON `clients` (`name2`);--> statement-breakpoint
+CREATE INDEX `clients_name3_idx` ON `clients` (`name3`);--> statement-breakpoint
+CREATE INDEX `clients_name4_idx` ON `clients` (`name4`);--> statement-breakpoint
+CREATE INDEX `clients_name5_idx` ON `clients` (`name5`);--> statement-breakpoint
+CREATE INDEX `clients_deleted_at_idx` ON `clients` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `contracts_client_id_idx` ON `contracts` (`client_id`);--> statement-breakpoint
+CREATE INDEX `contracts_order_client_id_idx` ON `contracts` (`order_client_id`);--> statement-breakpoint
+CREATE INDEX `contracts_name_idx` ON `contracts` (`name`);--> statement-breakpoint
+CREATE INDEX `contracts_deleted_at_idx` ON `contracts` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `files_file_list_id_idx` ON `files` (`FILE_LIST_ID`);--> statement-breakpoint
+CREATE INDEX `files_deleted_at_idx` ON `files` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `install_products_contract_id_idx` ON `install_products` (`CONTRACT_ID`);--> statement-breakpoint
+CREATE INDEX `inventory_product_id_idx` ON `product_inventory` (`product_id`);--> statement-breakpoint
+CREATE INDEX `inventory_date_idx` ON `product_inventory` (`date`);--> statement-breakpoint
+CREATE INDEX `inventory_deleted_at_idx` ON `product_inventory` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `products_name_idx` ON `products` (`name`);--> statement-breakpoint
+CREATE INDEX `products_deleted_at_idx` ON `products` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `protocols_name_idx` ON `protocols` (`name`);--> statement-breakpoint
+CREATE INDEX `protocols_deleted_at_idx` ON `protocols` (`deleted_at`);--> statement-breakpoint
+CREATE INDEX `repeaters_contract_id_idx` ON `repeaters` (`CONTRACT_ID`);--> statement-breakpoint
+CREATE INDEX `rooms_contract_id_idx` ON `rooms` (`CONTRACT_ID`);

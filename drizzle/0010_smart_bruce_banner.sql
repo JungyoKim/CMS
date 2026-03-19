@@ -1,0 +1,1 @@
+CREATE INDEX `as_sorting_idx` ON `as_records` (`request_date`,`AS_ID`);

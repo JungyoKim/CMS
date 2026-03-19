@@ -1,0 +1,277 @@
+<script lang="ts">
+	import {
+		getCoreRowModel,
+		getPaginationRowModel,
+		getSortedRowModel,
+		type ColumnDef,
+		type PaginationState,
+		type Row,
+		type SortingState
+	} from '@tanstack/table-core';
+	import type { Schema } from './schemas.js';
+	import type { Attachment } from 'svelte/attachments';
+	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
+	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
+	import * as Table from '$lib/components/ui/table/index.js';
+	import { FlexRender, renderSnippet } from '$lib/components/ui/data-table/index.js';
+	import GripVerticalIcon from '@tabler/icons-svelte/icons/grip-vertical';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { DragDropProvider } from '@dnd-kit-svelte/svelte';
+	import { move } from '@dnd-kit/helpers';
+	import { useSortable } from '@dnd-kit-svelte/svelte/sortable';
+	import { toast } from 'svelte-sonner';
+	import { cn } from '$lib/utils.js';
+	import HomeASDialogComponent from './home-as-dialog.svelte';
+	import { dateFormatter } from './data-table/utils.js';
+	import { getLocalTimeZone } from '@internationalized/date';
+
+	let {
+		data = $bindable([]),
+		clientList = [],
+		productList = [],
+		firmwareList = []
+	}: {
+		data: Schema[];
+		clientList?: any[];
+		productList?: any[];
+		firmwareList?: any[];
+	} = $props();
+
+	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 10 });
+	let sorting = $state<SortingState>([]);
+
+	// 홈 화면용 AS 수정 Dialog 상태
+	let homeASDialogOpen = $state(false);
+	let homeASEditingData = $state<any>(null);
+
+	// Define columns
+	const columns = $derived.by(() => {
+		return [
+			{
+				id: 'drag',
+				header: () => null,
+				cell: () => renderSnippet(DragHandle)
+			},
+			{
+				accessorKey: 'customerName',
+				header: '고객명',
+				cell: ({ row }) => {
+					// @ts-expect-error - Schema may not have these fields yet
+					return row.original.customerName || '-';
+				}
+			},
+			{
+				accessorKey: 'address',
+				header: '주소',
+				cell: ({ row }) => {
+					// @ts-expect-error - Schema may not have these fields yet
+					return row.original.address || '-';
+				}
+			},
+			{
+				accessorKey: 'requestDate',
+				header: '접수일',
+				cell: ({ row }) => {
+					// @ts-expect-error - Schema may not have these fields yet
+					const date = row.original.requestDate;
+					if (!date) return '-';
+					try {
+						return dateFormatter.format(new Date(date));
+					} catch (e) {
+						return date;
+					}
+				}
+			},
+			{
+				accessorKey: 'requestContent',
+				header: '접수내용',
+				cell: ({ row }) => {
+					// @ts-expect-error - Schema may not have these fields yet
+					return row.original.requestContent || '-';
+				}
+			},
+			{
+				accessorKey: 'cost',
+				header: '비용',
+				cell: ({ row }) => {
+					// @ts-expect-error - Schema may not have these fields yet
+					const cost = row.original.cost;
+					return cost ? new Intl.NumberFormat('ko-KR').format(Number(cost)) + '원' : '-';
+				}
+			}
+		] as ColumnDef<Schema>[];
+	});
+
+	const table = createSvelteTable({
+		get data() {
+			return data;
+		},
+		get columns() {
+			return columns;
+		},
+		state: {
+			get pagination() {
+				return pagination;
+			},
+			get sorting() {
+				return sorting;
+			}
+		},
+		getRowId: (row) => row.id.toString(),
+		enableRowSelection: false,
+		getCoreRowModel: getCoreRowModel(),
+		getPaginationRowModel: getPaginationRowModel(),
+		getSortedRowModel: getSortedRowModel(),
+		onPaginationChange: (updater) => {
+			if (typeof updater === 'function') {
+				pagination = updater(pagination);
+			} else {
+				pagination = updater;
+			}
+		},
+		onSortingChange: (updater) => {
+			if (typeof updater === 'function') {
+				sorting = updater(sorting);
+			} else {
+				sorting = updater;
+			}
+		}
+	});
+</script>
+
+{#snippet DragHandle({ attach }: { attach: Attachment })}
+	<Button
+		{@attach attach}
+		variant="ghost"
+		size="icon"
+		class="text-muted-foreground size-7 hover:bg-transparent"
+		onclick={(e) => e.stopPropagation()}
+		onmousedown={(e) => e.stopPropagation()}
+	>
+		<GripVerticalIcon class="text-muted-foreground size-3" />
+		<span class="sr-only">Drag to reorder</span>
+	</Button>
+{/snippet}
+
+{#snippet DraggableRow({ row, index }: { row: Row<Schema>; index: number })}
+	{@const { ref, isDragging, handleRef } = useSortable({
+		id: row.original.id,
+		index: () => index
+	})}
+
+	<Table.Row
+		data-state={row.getIsSelected() && 'selected'}
+		data-dragging={isDragging.current}
+		class="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 cursor-pointer hover:bg-muted/50"
+		{@attach ref}
+		onclick={async (e) => {
+			// 체크박스나 버튼 클릭 시에는 dialog를 열지 않음
+			const target = e.target as HTMLElement;
+			if (target.closest('[role="checkbox"]') || target.closest('button') || target.closest('a')) {
+				return;
+			}
+			e.stopPropagation();
+
+			// 이미 홈 화면용 dialog가 열려있으면 다시 열지 않음
+			if (homeASDialogOpen) {
+				return;
+			}
+
+			// @ts-expect-error - Schema may not have asId field
+			const asId = row.original.asId || row.original.id;
+			if (asId) {
+				try {
+					const response = await fetch(`/api/as/${asId}`);
+					if (response.ok) {
+						const asData = await response.json();
+						homeASEditingData = asData;
+						homeASDialogOpen = true;
+					} else {
+						toast.error('AS 데이터를 불러올 수 없습니다.');
+					}
+				} catch (error) {
+					console.error('[Home AS Table Click] Error fetching AS data:', error);
+					toast.error('AS 데이터를 불러오는 중 오류가 발생했습니다.');
+				}
+			} else {
+				toast.error('AS ID를 찾을 수 없습니다.');
+			}
+		}}
+	>
+		{#each row.getVisibleCells() as cell (cell.id)}
+			<Table.Cell class={cell.column.id === 'cost' ? 'text-end' : ''}>
+				<FlexRender
+					attach={cell.column.id === 'drag' ? handleRef : undefined}
+					content={cell.column.columnDef.cell}
+					context={cell.getContext()}
+				/>
+			</Table.Cell>
+		{/each}
+	</Table.Row>
+{/snippet}
+
+<div class="rounded-lg border flex flex-col md:h-full md:min-h-0 overflow-hidden">
+	<DragDropProvider
+		modifiers={[
+			// @ts-expect-error @dnd-kit/abstract types are botched atm
+			RestrictToVerticalAxis
+		]}
+		onDragEnd={(e) => (data = move(data, e))}
+	>
+		<div class="flex flex-col md:h-full md:min-h-0 overflow-hidden">
+			<div class="md:flex-1 md:min-h-0 relative">
+				<!-- 헤더 우측 스크롤바 덮개 (UI 개선) -->
+				<div
+					class="absolute top-0 right-0 w-[20px] h-[41px] bg-muted border-b z-20 pointer-events-none hidden md:block"
+				></div>
+				<div class="h-full overflow-auto [&>[data-slot=table-container]]:h-full">
+					<Table.Root>
+						<Table.Header class="bg-muted sticky top-0 z-10">
+							{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+								<Table.Row>
+									{#each headerGroup.headers as header (header.id)}
+										<Table.Head
+											colspan={header.colSpan}
+											class={header.column.id === 'cost' ? 'text-end' : ''}
+										>
+											{#if !header.isPlaceholder}
+												<FlexRender
+													content={header.column.columnDef.header}
+													context={header.getContext()}
+												/>
+											{/if}
+										</Table.Head>
+									{/each}
+								</Table.Row>
+							{/each}
+						</Table.Header>
+						<Table.Body class="**:data-[slot=table-cell]:first:w-8">
+							{#if table.getRowModel().rows?.length}
+								{#each table.getRowModel().rows as row, index (row.id)}
+									{@render DraggableRow({ row, index })}
+								{/each}
+							{:else}
+								<Table.Row class="hover:[&,&>svelte-css-wrapper]:[&>th,td]:!bg-transparent">
+									<Table.Cell
+										colspan={columns.length}
+										class="text-center py-8 hover:!bg-transparent"
+									>
+										<span class="text-muted-foreground text-sm">결과가 없습니다.</span>
+									</Table.Cell>
+								</Table.Row>
+							{/if}
+						</Table.Body>
+					</Table.Root>
+				</div>
+			</div>
+		</div>
+	</DragDropProvider>
+</div>
+
+<HomeASDialogComponent
+	bind:open={homeASDialogOpen}
+	bind:editingASData={homeASEditingData}
+	{clientList}
+	{productList}
+	{firmwareList}
+/>

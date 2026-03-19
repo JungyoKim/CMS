@@ -1,0 +1,1 @@
+ALTER TABLE `as_records` ADD `CLIENT_ID` integer;

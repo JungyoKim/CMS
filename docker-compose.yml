@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  cms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: ${DATABASE_URL:-./sqlite.db}
+    image: cms:latest
+    container_name: cms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_URL=/app/data/sqlite.db
+      - BODY_SIZE_LIMIT=Infinity
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET 환경변수를 설정해주세요}
+      - PRODUCTION_DOMAIN=${PRODUCTION_DOMAIN:-}
+    volumes:
+      # 데이터베이스 파일 저장 (영구 보존)
+      - ./data:/app/data
+      # 업로드된 파일 저장 (영구 보존)
+      - ./uploads:/app/uploads
+    networks:
+      - cms-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  cms-network:
+    driver: bridge
+
+
+
+
+
+
