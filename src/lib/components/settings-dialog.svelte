@@ -56,8 +56,8 @@
 						success = null;
 						return async ({ result }) => {
 							submitting = false;
-							if (result.type === 'failure') {
-								error = (result.data?.error as string) || '비밀번호 변경에 실패했습니다.';
+							if (result.type === 'success' && result.data && !(result.data as any).success) {
+								error = ((result.data as any).message as string) || '비밀번호 변경에 실패했습니다.';
 								success = null;
 							} else if (result.type === 'success') {
 								error = null;

@@ -2,20 +2,15 @@ import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { products, protocols, productInventory, files } from '$lib/server/db/schema';
 import { handleFileUpload, saveFileToList } from '$lib/server/file-storage';
-import { batchFetchFileNames, escapeLike } from '$lib/server/query-helpers';
+import { batchFetchFileNames, escapeLike, parseListParams, withSoftDelete, paginatedQuery } from '$lib/server/query-helpers';
 import { softDeleteWithFiles, parseDeleteIds } from '$lib/server/crud-helpers';
-import { eq, inArray, like, sql, count, or, and, isNull, desc } from 'drizzle-orm';
+import { eq, inArray, like, sql, or, and, isNull } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const { defaultPageSize } = await parent();
-	// 페이지 이동 시마다 최신 데이터를 가져오도록 depends 추가
 	depends('products:update');
-	// URL 쿼리 파라미터에서 검색어, 검색 필드, 페이지 정보 가져오기
-	const searchQuery = url.searchParams.get('search') || '';
-	const searchField = url.searchParams.get('field') || 'productName';
-	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
-	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
+
+	const { searchQuery, searchField, page, pageSize, offset } = parseListParams(url, defaultPageSize, 'productName');
 
 	// 펌웨어 목록 가져오기 (검색용, 삭제되지 않은 것만)
 	const firmwareList = await db.select({
@@ -24,7 +19,7 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	}).from(protocols).where(isNull(protocols.deletedAt));
 
 	// 검색 조건 구성
-	let whereCondition = undefined;
+	let searchCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
 		const escaped = escapeLike(searchQuery);
@@ -35,13 +30,11 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		} else if (searchField === 'memo') {
 			conditions.push(like(products.memo, `%${escaped}%`));
 		} else if (searchField === 'price') {
-			// 단가 검색: 숫자로 변환 가능한 경우 숫자 검색, 그렇지 않으면 문자열 검색
 			const priceNum = parseInt(searchQuery, 10);
 			if (!isNaN(priceNum)) {
 				conditions.push(eq(products.price, priceNum));
 			}
 		} else if (searchField === 'photoFileName') {
-			// 사진 파일명 검색 - files 테이블과 EXISTS 서브쿼리
 			const searchLower = escapeLike(searchQuery.toLowerCase());
 			conditions.push(sql`EXISTS (
 				SELECT 1 FROM files f
@@ -50,7 +43,6 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
 			)`);
 		} else if (searchField === 'protocolId') {
-			// 펌웨어 이름으로 검색 - 일치하는 firmwareId로 필터
 			const searchLower = searchQuery.toLowerCase();
 			const matchingFirmwareIds = firmwareList
 				.filter(f => f.name && f.name.toLowerCase().includes(searchLower))
@@ -61,7 +53,6 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 				conditions.push(sql`1 = 0`);
 			}
 		} else if (searchField === 'totalQuantity') {
-			// 재고 수량 검색 - product_inventory 서브쿼리
 			conditions.push(sql`CAST((
 				SELECT COALESCE(SUM(CASE WHEN type = 'in' THEN quantity ELSE -quantity END), 0)
 				FROM product_inventory
@@ -70,24 +61,12 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 			) AS TEXT) LIKE ${'%' + escapeLike(searchQuery) + '%'}`);
 		}
 		if (conditions.length > 0) {
-			whereCondition = or(...conditions);
+			searchCondition = or(...conditions);
 		}
 	}
 
-	const deletedAtCondition = isNull(products.deletedAt);
-	const finalWhereCondition = whereCondition
-		? and(whereCondition, deletedAtCondition)
-		: deletedAtCondition;
-
-	const offset = (page - 1) * pageSize;
-
-	// DB 레벨 페이지네이션
-	const [countResult, rows] = await Promise.all([
-		db.select({ count: count() }).from(products).where(finalWhereCondition),
-		db.select().from(products).where(finalWhereCondition).orderBy(desc(products.productId)).limit(pageSize).offset(offset)
-	]);
-
-	const totalCount = countResult[0]?.count ?? 0;
+	const where = withSoftDelete(products.deletedAt, searchCondition);
+	const { totalCount, rows } = await paginatedQuery(products, { where, orderBy: products.productId, limit: pageSize, offset });
 
 	const fileNamesMap = await batchFetchFileNames(rows.map(r => r.photoFileListId));
 

@@ -1,6 +1,8 @@
 import { db } from '$lib/server/db';
 import { asRecords, rooms, repeaters, installProducts, files, clients } from '$lib/server/db/schema';
-import { eq, inArray, like, and, isNull, or } from 'drizzle-orm';
+import { eq, inArray, like, and, isNull, or, count, desc } from 'drizzle-orm';
+import type { SQLWrapper } from 'drizzle-orm';
+import type { SQLiteTable, SQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 /**
  * SQL LIKE 패턴에서 특수 와일드카드 문자(%, _)를 이스케이프합니다.
@@ -11,7 +13,56 @@ export function escapeLike(value: string): string {
 }
 
 /**
- * Create customer name from name parts
+ * URL 쿼리 파라미터에서 검색·페이지네이션 정보를 파싱합니다.
+ * 모든 목록 페이지에서 공통으로 사용됩니다.
+ */
+export function parseListParams(url: URL, defaultPageSize: number, defaultField = 'name') {
+	const searchQuery = url.searchParams.get('search') || '';
+	const searchField = url.searchParams.get('field') || defaultField;
+	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
+	const offset = (page - 1) * pageSize;
+
+	return { searchQuery, searchField, page, pageSize, offset };
+}
+
+/**
+ * 검색 조건과 deletedAt IS NULL 조건을 결합합니다.
+ */
+export function withSoftDelete(deletedAtColumn: SQLiteColumn, searchCondition?: SQLWrapper) {
+	const deletedAtCondition = isNull(deletedAtColumn);
+	return searchCondition ? and(searchCondition, deletedAtCondition) : deletedAtCondition;
+}
+
+/**
+ * count + 데이터 조회를 병렬로 실행합니다.
+ * 모든 목록 페이지에서 공통으로 사용되는 페이지네이션 쿼리입니다.
+ */
+export async function paginatedQuery<T extends SQLiteTable>(
+	table: T,
+	options: {
+		where?: SQLWrapper;
+		orderBy: SQLiteColumn;
+		limit: number;
+		offset: number;
+	}
+) {
+	const { where, orderBy, limit, offset } = options;
+
+	const [countResult, rows] = await Promise.all([
+		db.select({ count: count() }).from(table).where(where),
+		db.select().from(table).where(where).orderBy(desc(orderBy)).limit(limit).offset(offset)
+	]);
+
+	return {
+		totalCount: countResult[0]?.count ?? 0,
+		rows
+	};
+}
+
+/**
+ * name1~5를 합쳐서 고객명을 생성합니다. 비어있으면 '-'를 반환합니다.
  */
 export function createClientName(client: {
     name1?: string | null;
@@ -26,7 +77,7 @@ export function createClientName(client: {
 }
 
 /**
- * Calculate AS status from records
+ * AS 기록 목록에서 상태(없음/진행중/완료)와 미완료 수를 계산합니다.
  */
 export function calculateASStatus(records: { isCompleted?: number | null }[]): { status: string; incompleteCount: number } {
     if (records.length === 0) {
@@ -45,7 +96,7 @@ export function calculateASStatus(records: { isCompleted?: number | null }[]): {
 }
 
 /**
- * Batch fetch AS records by contract IDs
+ * 계약 ID 목록으로 AS 기록을 일괄 조회합니다.
  */
 export async function batchFetchASRecords(contractIds: number[]): Promise<Map<number, typeof asRecords.$inferSelect[]>> {
     if (contractIds.length === 0) return new Map();
@@ -64,7 +115,7 @@ export async function batchFetchASRecords(contractIds: number[]): Promise<Map<nu
 }
 
 /**
- * Batch fetch rooms by contract IDs
+ * 계약 ID 목록으로 객실 정보를 일괄 조회합니다.
  */
 export async function batchFetchRooms(contractIds: number[]): Promise<Map<number, typeof rooms.$inferSelect[]>> {
     if (contractIds.length === 0) return new Map();
@@ -81,7 +132,7 @@ export async function batchFetchRooms(contractIds: number[]): Promise<Map<number
 }
 
 /**
- * Batch fetch repeaters by contract IDs
+ * 계약 ID 목록으로 중계기 정보를 일괄 조회합니다.
  */
 export async function batchFetchRepeaters(contractIds: number[]): Promise<Map<number, typeof repeaters.$inferSelect[]>> {
     if (contractIds.length === 0) return new Map();
@@ -98,7 +149,7 @@ export async function batchFetchRepeaters(contractIds: number[]): Promise<Map<nu
 }
 
 /**
- * Batch fetch install products by contract IDs
+ * 계약 ID 목록으로 설치 제품 정보를 일괄 조회합니다.
  */
 export async function batchFetchInstallProducts(contractIds: number[]): Promise<Map<number, typeof installProducts.$inferSelect[]>> {
     if (contractIds.length === 0) return new Map();
@@ -115,7 +166,7 @@ export async function batchFetchInstallProducts(contractIds: number[]): Promise<
 }
 
 /**
- * Batch fetch clients by client IDs
+ * 고객 ID 목록으로 고객 정보를 일괄 조회합니다.
  */
 export async function batchFetchClients(clientIds: number[]): Promise<Map<number, typeof clients.$inferSelect>> {
     if (clientIds.length === 0) return new Map();
@@ -131,8 +182,8 @@ export async function batchFetchClients(clientIds: number[]): Promise<Map<number
 }
 
 /**
- * Batch fetch documents by contract IDs
- * Returns a map of contractId -> document entries
+ * 계약 ID 목록으로 첨부 문서를 일괄 조회합니다.
+ * contractId → 문서 배열 Map을 반환합니다.
  */
 export async function batchFetchDocuments(contractIds: number[]): Promise<Map<number, { content: string; fileName: string; fileListId: string }[]>> {
     if (contractIds.length === 0) return new Map();
@@ -145,7 +196,7 @@ export async function batchFetchDocuments(contractIds: number[]): Promise<Map<nu
             or(...likeConditions)
         ));
 
-    // Group by contract ID
+    // 계약 ID별로 그룹핑
     const map = new Map<number, { content: string; fileName: string; fileListId: string }[]>();
 
     for (const doc of allDocuments) {
@@ -171,7 +222,7 @@ export async function batchFetchDocuments(contractIds: number[]): Promise<Map<nu
 }
 
 /**
- * Batch fetch file names by list IDs
+ * 파일 리스트 ID 목록으로 파일명을 일괄 조회합니다.
  */
 export async function batchFetchFileNames(listIds: (string | null | undefined)[]): Promise<Map<string, string[]>> {
     const validIds = listIds.filter((id): id is string => id !== null && id !== undefined && id !== '');

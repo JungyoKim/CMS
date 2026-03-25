@@ -1,4 +1,3 @@
-import { fail } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { db } from '$lib/server/db';
 import { settings, passwords } from '$lib/server/db/schema';
@@ -13,26 +12,26 @@ export const actions: Actions = {
 		const confirmPassword = formData.get('confirmPassword')?.toString();
 
 		if (!currentPassword || !newPassword || !confirmPassword) {
-			return fail(400, { error: '모든 필드를 입력해주세요.' });
+			return { success: false, message: '모든 필드를 입력해주세요.' };
 		}
 
 		if (newPassword !== confirmPassword) {
-			return fail(400, { error: '새 비밀번호와 확인 비밀번호가 일치하지 않습니다.' });
+			return { success: false, message: '새 비밀번호와 확인 비밀번호가 일치하지 않습니다.' };
 		}
 
 		if (currentPassword === newPassword) {
-			return fail(400, { error: '현재 비밀번호와 새 비밀번호가 같습니다. 다른 비밀번호를 입력해주세요.' });
+			return { success: false, message: '현재 비밀번호와 새 비밀번호가 같습니다. 다른 비밀번호를 입력해주세요.' };
 		}
 
 		// 현재 비밀번호 확인
 		const storedPassword = await db.select().from(passwords).limit(1);
 		const currentStoredPassword = storedPassword[0]?.password;
 		if (!currentStoredPassword) {
-			return fail(400, { error: '저장된 비밀번호가 없습니다. 먼저 로그인하세요.' });
+			return { success: false, message: '저장된 비밀번호가 없습니다. 먼저 로그인하세요.' };
 		}
 
 		if (!verifyPassword(currentPassword, currentStoredPassword)) {
-			return fail(401, { error: '현재 비밀번호가 올바르지 않습니다.' });
+			return { success: false, message: '현재 비밀번호가 올바르지 않습니다.' };
 		}
 
 		// 새 비밀번호를 해싱하여 저장
@@ -54,28 +53,26 @@ export const actions: Actions = {
 		const expirationValue = formData.get('expirationValue')?.toString();
 
 		if (!expirationType) {
-			return fail(400, { error: '유효기간 타입을 선택해주세요.' });
+			return { success: false, message: '유효기간 타입을 선택해주세요.' };
 		}
 
 		if (expirationType === 'never') {
-			// 만료 없음 설정
 			await db.insert(settings).values({ key: 'tokenExpiration', value: 'never' })
 				.onConflictDoUpdate({ target: settings.key, set: { value: 'never' } });
 		} else {
 			if (!expirationValue) {
-				return fail(400, { error: '유효기간 값을 입력해주세요.' });
+				return { success: false, message: '유효기간 값을 입력해주세요.' };
 			}
 
 			const value = parseInt(expirationValue);
 			if (isNaN(value) || value < 1) {
-				return fail(400, { error: '유효한 값을 입력해주세요.' });
+				return { success: false, message: '유효한 값을 입력해주세요.' };
 			}
 
 			if (expirationType === 'days' && value > 7) {
-				return fail(400, { error: '일 단위는 최대 7일까지 설정할 수 있습니다.' });
+				return { success: false, message: '일 단위는 최대 7일까지 설정할 수 있습니다.' };
 			}
 
-			// 설정 저장 (예: "minutes:30", "hours:2", "days:7")
 			const settingValue = `${expirationType}:${value}`;
 			await db.insert(settings).values({ key: 'tokenExpiration', value: settingValue })
 				.onConflictDoUpdate({ target: settings.key, set: { value: settingValue } });
@@ -84,5 +81,3 @@ export const actions: Actions = {
 		return { success: true };
 	}
 };
-
-

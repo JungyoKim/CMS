@@ -117,7 +117,7 @@
 	let rowSelection = $state<RowSelectionState>({});
 	let pageSizeSelectValue = $state<string>(String(pageSize));
 	let searchQuery = $state($page.url.searchParams.get('search') || '');
-	let searchField = $state<string | null>($page.url.searchParams.get('field') || 'name');
+	let searchField = $state<string | undefined>($page.url.searchParams.get('field') || 'name');
 
 	// --- Form & Dialog State ---
 	let dialogOpen = $state(false);

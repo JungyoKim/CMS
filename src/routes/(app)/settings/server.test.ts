@@ -44,36 +44,37 @@ describe('changePassword', () => {
 		vi.clearAllMocks();
 	});
 
-	it('필수 필드가 없으면 400을 반환한다', async () => {
+	it('필수 필드가 없으면 실패를 반환한다', async () => {
 		const result = await actions.changePassword(createFormEvent({
 			currentPassword: 'old',
 			newPassword: 'new'
 			// confirmPassword 누락
 		}));
-		expect(result?.status).toBe(400);
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toBeTruthy();
 	});
 
-	it('새 비밀번호와 확인이 불일치하면 400을 반환한다', async () => {
+	it('새 비밀번호와 확인이 불일치하면 실패를 반환한다', async () => {
 		const result = await actions.changePassword(createFormEvent({
 			currentPassword: 'old',
 			newPassword: 'new1',
 			confirmPassword: 'new2'
 		}));
-		expect(result?.status).toBe(400);
-		expect((result?.data as any)?.error).toContain('일치하지 않');
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toContain('일치하지 않');
 	});
 
-	it('현재와 새 비밀번호가 같으면 400을 반환한다', async () => {
+	it('현재와 새 비밀번호가 같으면 실패를 반환한다', async () => {
 		const result = await actions.changePassword(createFormEvent({
 			currentPassword: 'same',
 			newPassword: 'same',
 			confirmPassword: 'same'
 		}));
-		expect(result?.status).toBe(400);
-		expect((result?.data as any)?.error).toContain('같습니다');
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toContain('같습니다');
 	});
 
-	it('저장된 비밀번호가 없으면 400을 반환한다', async () => {
+	it('저장된 비밀번호가 없으면 실패를 반환한다', async () => {
 		mockSelectLimit.mockResolvedValue([]);
 
 		const result = await actions.changePassword(createFormEvent({
@@ -81,11 +82,11 @@ describe('changePassword', () => {
 			newPassword: 'new123',
 			confirmPassword: 'new123'
 		}));
-		expect(result?.status).toBe(400);
-		expect((result?.data as any)?.error).toContain('저장된 비밀번호');
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toContain('저장된 비밀번호');
 	});
 
-	it('현재 비밀번호가 틀리면 401을 반환한다', async () => {
+	it('현재 비밀번호가 틀리면 실패를 반환한다', async () => {
 		const hashed = hashPassword('correct');
 		mockSelectLimit.mockResolvedValue([{ password: hashed, pwId: 1 }]);
 
@@ -94,7 +95,8 @@ describe('changePassword', () => {
 			newPassword: 'new123',
 			confirmPassword: 'new123'
 		}));
-		expect(result?.status).toBe(401);
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toContain('올바르지 않');
 	});
 
 	it('비밀번호를 성공적으로 변경한다', async () => {
@@ -117,9 +119,9 @@ describe('setTokenExpiration', () => {
 		mockOnConflictDoUpdate.mockResolvedValue(undefined);
 	});
 
-	it('expirationType이 없으면 400을 반환한다', async () => {
+	it('expirationType이 없으면 실패를 반환한다', async () => {
 		const result = await actions.setTokenExpiration(createFormEvent({}));
-		expect(result?.status).toBe(400);
+		expect((result as any)?.success).toBe(false);
 	});
 
 	it('never를 설정한다', async () => {
@@ -130,13 +132,13 @@ describe('setTokenExpiration', () => {
 		expect(mockInsertValues).toHaveBeenCalled();
 	});
 
-	it('일 단위 7일 초과는 400을 반환한다', async () => {
+	it('일 단위 7일 초과는 실패를 반환한다', async () => {
 		const result = await actions.setTokenExpiration(createFormEvent({
 			expirationType: 'days',
 			expirationValue: '10'
 		}));
-		expect(result?.status).toBe(400);
-		expect((result?.data as any)?.error).toContain('7일');
+		expect((result as any)?.success).toBe(false);
+		expect((result as any)?.message).toContain('7일');
 	});
 
 	it('유효한 시간 단위 설정을 저장한다', async () => {
@@ -147,18 +149,18 @@ describe('setTokenExpiration', () => {
 		expect((result as any)?.success).toBe(true);
 	});
 
-	it('유효하지 않은 값은 400을 반환한다', async () => {
+	it('유효하지 않은 값은 실패를 반환한다', async () => {
 		const result = await actions.setTokenExpiration(createFormEvent({
 			expirationType: 'hours',
 			expirationValue: 'abc'
 		}));
-		expect(result?.status).toBe(400);
+		expect((result as any)?.success).toBe(false);
 	});
 
-	it('expirationValue 없이 days를 보내면 400을 반환한다', async () => {
+	it('expirationValue 없이 days를 보내면 실패를 반환한다', async () => {
 		const result = await actions.setTokenExpiration(createFormEvent({
 			expirationType: 'days'
 		}));
-		expect(result?.status).toBe(400);
+		expect((result as any)?.success).toBe(false);
 	});
 });

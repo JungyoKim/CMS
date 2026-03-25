@@ -42,7 +42,7 @@ export async function softDeleteWithFiles<T extends SQLiteTable>(opts: {
 		}
 	}
 
-	// Soft delete
+	// 소프트 삭제
 	const deletedAt = new Date().toISOString();
 	await db
 		.update(table)

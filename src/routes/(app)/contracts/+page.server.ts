@@ -14,7 +14,9 @@ import {
 	batchFetchClients,
 	batchFetchDocuments,
 	batchFetchFileNames,
-	escapeLike
+	escapeLike,
+	parseListParams,
+	withSoftDelete
 } from '$lib/server/query-helpers';
 import {
 	parseContractFormData,
@@ -28,18 +30,14 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const { defaultPageSize } = await parent();
 	// 페이지 이동 시마다 최신 데이터를 가져오도록 depends 추가
 	depends('contracts:update');
-	depends('clients:update'); // 고객사 정보도 함께 갱신
-	depends('products:update'); // 제품 목록도 함께 갱신
-	depends('firmware:update'); // 펌웨어 목록도 함께 갱신
-	// URL 쿼리 파라미터에서 검색어, 검색 필드, 페이지 정보 가져오기
-	const searchQuery = url.searchParams.get('search') || '';
-	const searchField = url.searchParams.get('field') || 'name';
-	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
-	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
+	depends('clients:update');
+	depends('products:update');
+	depends('firmware:update');
+
+	const { searchQuery, searchField, page, pageSize, offset } = parseListParams(url, defaultPageSize, 'name');
 
 	// 검색 조건 구성
-	let whereCondition = undefined;
+	let searchCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
 		const escaped = escapeLike(searchQuery);
@@ -100,18 +98,13 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 			}
 		}
 		if (conditions.length > 0) {
-			whereCondition = or(...conditions);
+			searchCondition = or(...conditions);
 		}
 	}
 
-	const deletedAtCondition = isNull(contracts.deletedAt);
-	const finalWhereCondition = whereCondition
-		? and(whereCondition, deletedAtCondition)
-		: deletedAtCondition;
+	const finalWhereCondition = withSoftDelete(contracts.deletedAt, searchCondition);
 
-	const offset = (page - 1) * pageSize;
-
-	// DB 레벨 페이지네이션
+	// DB 레벨 페이지네이션 (leftJoin 때문에 공통 유틸 대신 직접 쿼리)
 	const baseQuery = db
 		.select({
 			contract: contracts,

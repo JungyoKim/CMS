@@ -2,9 +2,9 @@ import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { protocols, files } from '$lib/server/db/schema';
 import { handleFileUpload, getFileNamesByListId, saveFileToList } from '$lib/server/file-storage';
-import { batchFetchFileNames, escapeLike } from '$lib/server/query-helpers';
+import { batchFetchFileNames, escapeLike, parseListParams, withSoftDelete, paginatedQuery } from '$lib/server/query-helpers';
 import { softDeleteWithFiles, parseDeleteIds } from '$lib/server/crud-helpers';
-import { eq, like, sql, count, or, and, isNull, desc } from 'drizzle-orm';
+import { eq, like, sql, or, and, isNull } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const { defaultPageSize } = await parent();
@@ -37,15 +37,10 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		return { firmware: null };
 	}
 
-	// URL 쿼리 파라미터에서 검색어, 검색 필드, 페이지 정보 가져오기
-	const searchQuery = url.searchParams.get('search') || '';
-	const searchField = url.searchParams.get('field') || 'name';
-	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
-	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
+	const { searchQuery, searchField, page, pageSize, offset } = parseListParams(url, defaultPageSize, 'name');
 
 	// 검색 조건 구성
-	let whereCondition = undefined;
+	let searchCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
 		const escaped = escapeLike(searchQuery);
@@ -54,7 +49,6 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		} else if (searchField === 'memo') {
 			conditions.push(like(protocols.memo, `%${escaped}%`));
 		} else if (searchField === 'firmwareFileName') {
-			// 펌웨어 파일명 검색 - files 테이블과 EXISTS 서브쿼리
 			const searchLower = escapeLike(searchQuery.toLowerCase());
 			conditions.push(sql`EXISTS (
 				SELECT 1 FROM files f
@@ -63,7 +57,6 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
 			)`);
 		} else if (searchField === 'docFileName') {
-			// 기타문서 파일명 검색 - files 테이블과 EXISTS 서브쿼리
 			const searchLower = escapeLike(searchQuery.toLowerCase());
 			conditions.push(sql`EXISTS (
 				SELECT 1 FROM files f
@@ -73,24 +66,12 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 			)`);
 		}
 		if (conditions.length > 0) {
-			whereCondition = or(...conditions);
+			searchCondition = or(...conditions);
 		}
 	}
 
-	const deletedAtCondition = isNull(protocols.deletedAt);
-	const finalWhereCondition = whereCondition
-		? and(whereCondition, deletedAtCondition)
-		: deletedAtCondition;
-
-	const offset = (page - 1) * pageSize;
-
-	// DB 레벨 페이지네이션
-	const [countResult, rows] = await Promise.all([
-		db.select({ count: count() }).from(protocols).where(finalWhereCondition),
-		db.select().from(protocols).where(finalWhereCondition).orderBy(desc(protocols.protocolId)).limit(pageSize).offset(offset)
-	]);
-
-	const totalCount = countResult[0]?.count ?? 0;
+	const where = withSoftDelete(protocols.deletedAt, searchCondition);
+	const { totalCount, rows } = await paginatedQuery(protocols, { where, orderBy: protocols.protocolId, limit: pageSize, offset });
 
 	const allFileListIds = [
 		...rows.map(r => r.firmwareFileListId),
