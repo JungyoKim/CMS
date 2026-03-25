@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('$lib/server/db', () => ({ db: {} }));
+vi.mock('$lib/server/db/schema', () => ({}));
+vi.mock('drizzle-orm', () => ({ eq: vi.fn(), inArray: vi.fn(), like: vi.fn(), and: vi.fn(), isNull: vi.fn(), or: vi.fn() }));
+
 import { createClientName, calculateASStatus } from './query-helpers';
 
 describe('createClientName', () => {
