@@ -8,31 +8,6 @@ export function generateId(prefix: string = ''): string {
 }
 
 /**
- * Format currency value to Korean Won
- * @param value - Number or string value
- * @returns Formatted string with "원" suffix
- */
-export function formatCurrency(value: number | string | undefined | null): string {
-    if (value === undefined || value === null || value === '') return '-';
-
-    const num = typeof value === 'string' ? parseInt(value, 10) : value;
-    if (isNaN(num)) return '-';
-
-    return new Intl.NumberFormat('ko-KR').format(num) + '원';
-}
-
-/**
- * Parse currency string to number
- * @param value - Currency string (may contain commas, 원, etc.)
- * @returns Parsed number or 0
- */
-export function parseCurrency(value: string): number {
-    if (!value) return 0;
-    const cleaned = value.replace(/[^0-9-]/g, '');
-    return parseInt(cleaned, 10) || 0;
-}
-
-/**
  * Create customer name from name parts
  * @param name1 - Name part 1
  * @param name2 - Name part 2

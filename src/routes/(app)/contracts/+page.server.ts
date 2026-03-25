@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { contracts, clients, products, protocols } from '$lib/server/db/schema';
-import { saveFileToList, deleteFilesByListId } from '$lib/server/file-storage';
+import { contracts, clients, products, protocols, files, asRecords } from '$lib/server/db/schema';
+import { saveFileToList } from '$lib/server/file-storage';
 import { softDeleteWithFiles, parseDeleteIds } from '$lib/server/crud-helpers';
 import { eq, like, sql, count, or, and, isNull, desc } from 'drizzle-orm';
 import {
@@ -13,7 +13,8 @@ import {
 	batchFetchInstallProducts,
 	batchFetchClients,
 	batchFetchDocuments,
-	batchFetchFileNames
+	batchFetchFileNames,
+	escapeLike
 } from '$lib/server/query-helpers';
 import {
 	parseContractFormData,
@@ -34,36 +35,69 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const searchQuery = url.searchParams.get('search') || '';
 	const searchField = url.searchParams.get('field') || 'name';
 	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSize = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
 
 	// 검색 조건 구성
 	let whereCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
+		const escaped = escapeLike(searchQuery);
 		if (searchField === 'name') {
 			// 계약명 검색
-			conditions.push(like(contracts.name, `%${searchQuery}%`));
+			conditions.push(like(contracts.name, `%${escaped}%`));
 		} else if (searchField === 'customerName') {
 			// 고객사명 검색 - clients 테이블과 조인 필요
-			conditions.push(like(clients.name1, `%${searchQuery}%`));
-			conditions.push(like(clients.name2, `%${searchQuery}%`));
-			conditions.push(like(clients.name3, `%${searchQuery}%`));
-			conditions.push(like(clients.name4, `%${searchQuery}%`));
-			conditions.push(like(clients.name5, `%${searchQuery}%`));
+			conditions.push(like(clients.name1, `%${escaped}%`));
+			conditions.push(like(clients.name2, `%${escaped}%`));
+			conditions.push(like(clients.name3, `%${escaped}%`));
+			conditions.push(like(clients.name4, `%${escaped}%`));
+			conditions.push(like(clients.name5, `%${escaped}%`));
 		} else if (searchField === 'phone') {
 			// 연락처 검색 - clients 테이블의 mainContactPhone (하이픈 무시)
-			const cleanQuery = searchQuery.replace(/-/g, '');
+			const cleanQuery = escapeLike(searchQuery.replace(/-/g, ''));
 			conditions.push(sql`replace(${clients.mainContactPhone}, '-', '') LIKE ${'%' + cleanQuery + '%'}`);
 		} else if (searchField === 'email') {
 			// 이메일 검색 - clients 테이블의 mainContactEmail
-			conditions.push(like(clients.mainContactEmail, `%${searchQuery}%`));
+			conditions.push(like(clients.mainContactEmail, `%${escaped}%`));
 		} else if (searchField === 'address') {
 			// 주소 검색 - clients 테이블의 address
-			conditions.push(like(clients.address, `%${searchQuery}%`));
+			conditions.push(like(clients.address, `%${escaped}%`));
 		} else if (searchField === 'customerStatus') {
 			// 고객상태 검색 - contracts 테이블의 status 필드
 			// searchQuery는 "pre-sales", "active", "terminated" 중 하나
 			conditions.push(eq(contracts.status, searchQuery));
+		} else if (searchField === 'attachmentFileName') {
+			// 첨부파일명 검색 - files 테이블과 EXISTS 서브쿼리
+			const searchLower = escapeLike(searchQuery.toLowerCase());
+			conditions.push(sql`EXISTS (
+				SELECT 1 FROM files f
+				WHERE f.FILE_LIST_ID = ${contracts.attachmentFileListId}
+				AND f.deleted_at IS NULL
+				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
+			)`);
+		} else if (searchField === 'asStatus') {
+			// AS 상태 검색 - as_records 테이블과 EXISTS 서브쿼리
+			if (searchQuery === '없음') {
+				conditions.push(sql`NOT EXISTS (
+					SELECT 1 FROM as_records ar
+					WHERE ar.CONTRACT_ID = ${contracts.contractId}
+				)`);
+			} else if (searchQuery === '진행중') {
+				conditions.push(sql`EXISTS (
+					SELECT 1 FROM as_records ar
+					WHERE ar.CONTRACT_ID = ${contracts.contractId}
+					AND (ar.is_completed = 0 OR ar.is_completed IS NULL)
+				)`);
+			} else if (searchQuery === '완료') {
+				conditions.push(sql`EXISTS (
+					SELECT 1 FROM as_records ar WHERE ar.CONTRACT_ID = ${contracts.contractId}
+				) AND NOT EXISTS (
+					SELECT 1 FROM as_records ar
+					WHERE ar.CONTRACT_ID = ${contracts.contractId}
+					AND (ar.is_completed = 0 OR ar.is_completed IS NULL)
+				)`);
+			}
 		}
 		if (conditions.length > 0) {
 			whereCondition = or(...conditions);
@@ -75,74 +109,27 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		? and(whereCondition, deletedAtCondition)
 		: deletedAtCondition;
 
-	// 파일명/AS상태 검색은 메모리 필터링이 필요하므로 전체 로드
-	// 일반 검색은 DB에서 페이지네이션 처리
-	const needsMemoryFilter = searchQuery.trim() && (searchField === 'attachmentFileName' || searchField === 'asStatus');
 	const offset = (page - 1) * pageSize;
 
-	let rows: { contract: typeof contracts.$inferSelect; client: typeof clients.$inferSelect | null }[];
-	let totalCount: number;
+	// DB 레벨 페이지네이션
+	const baseQuery = db
+		.select({
+			contract: contracts,
+			client: clients
+		})
+		.from(contracts)
+		.leftJoin(clients, eq(contracts.clientId, clients.clientId))
+		.where(finalWhereCondition);
 
-	if (needsMemoryFilter) {
-		let allRows = await db
-			.select({
-				contract: contracts,
-				client: clients
-			})
+	const [countResult, rows] = await Promise.all([
+		db.select({ count: count() })
 			.from(contracts)
 			.leftJoin(clients, eq(contracts.clientId, clients.clientId))
-			.where(finalWhereCondition)
-			.orderBy(desc(contracts.contractId));
+			.where(finalWhereCondition),
+		baseQuery.orderBy(desc(contracts.contractId)).limit(pageSize).offset(offset)
+	]);
 
-		// 파일명으로 검색하는 경우 (일괄 조회 최적화)
-		if (searchField === 'attachmentFileName') {
-			const fileListIds = allRows.map(r => r.contract.attachmentFileListId);
-			const fileNamesMap = await batchFetchFileNames(fileListIds);
-			allRows = allRows.filter(row => {
-				const fileNames = row.contract.attachmentFileListId
-					? fileNamesMap.get(row.contract.attachmentFileListId) || []
-					: [];
-				return fileNames.some(fileName =>
-					fileName.toLowerCase().includes(searchQuery.toLowerCase())
-				);
-			});
-		}
-
-		// AS상태로 검색하는 경우 (일괄 조회 최적화)
-		if (searchField === 'asStatus') {
-			const contractIds = allRows.map(r => r.contract.contractId);
-			const asRecordsMap = await batchFetchASRecords(contractIds);
-			allRows = allRows.filter(row => {
-				const records = asRecordsMap.get(row.contract.contractId) || [];
-				const { status: asStatus } = calculateASStatus(records);
-				return asStatus === searchQuery;
-			});
-		}
-
-		totalCount = allRows.length;
-		rows = allRows.slice(offset, offset + pageSize);
-	} else {
-		// DB 레벨 페이지네이션 (메모리 효율적)
-		const baseQuery = db
-			.select({
-				contract: contracts,
-				client: clients
-			})
-			.from(contracts)
-			.leftJoin(clients, eq(contracts.clientId, clients.clientId))
-			.where(finalWhereCondition);
-
-		const [countResult, pageRows] = await Promise.all([
-			db.select({ count: count() })
-				.from(contracts)
-				.leftJoin(clients, eq(contracts.clientId, clients.clientId))
-				.where(finalWhereCondition),
-			baseQuery.orderBy(desc(contracts.contractId)).limit(pageSize).offset(offset)
-		]);
-
-		totalCount = countResult[0]?.count ?? 0;
-		rows = pageRows;
-	}
+	const totalCount = countResult[0]?.count ?? 0;
 
 	// 일괄 조회 최적화: 필요한 모든 데이터를 미리 가져오기
 	const contractIds = rows.map(r => r.contract.contractId);
@@ -404,7 +391,11 @@ export const actions: Actions = {
 		}
 
 		if (newContractId) {
-			await saveDocuments(newContractId, formData);
+			try {
+				await saveDocuments(newContractId, formData);
+			} catch {
+				return { success: false, message: '관련문서 저장에 실패했습니다.' };
+			}
 		}
 
 		return { success: true };
@@ -434,21 +425,17 @@ export const actions: Actions = {
 			return { success: false, message: '계약을 찾을 수 없습니다.' };
 		}
 
-		// 첨부파일 처리
-		let attachmentFileListId = existingContract.attachmentFileListId;
-		const file = formData.get('attachmentFile');
-		if (file instanceof File && file.size > 0) {
+		// 첨부파일 처리 - 새 파일 업로드는 트랜잭션 밖에서 (disk I/O)
+		const attachmentFile = formData.get('attachmentFile');
+		let newAttachmentFileListId: string | null = null;
+		if (attachmentFile instanceof File && attachmentFile.size > 0) {
 			try {
-				if (attachmentFileListId) await deleteFilesByListId(attachmentFileListId);
-				attachmentFileListId = await saveFileToList({ file, category: 'contracts' });
+				newAttachmentFileListId = await saveFileToList({ file: attachmentFile, category: 'contracts' });
 			} catch {
 				return { success: false, message: '파일 저장에 실패했습니다.' };
 			}
 		}
-		if (formData.get('removeAttachmentFile') === 'true' && attachmentFileListId) {
-			await deleteFilesByListId(attachmentFileListId);
-			attachmentFileListId = null;
-		}
+		const removeAttachment = formData.get('removeAttachmentFile') === 'true';
 
 		// clientId가 빈 문자열이면 기존 값 사용
 		const finalClientId = (data.clientId && data.clientId.trim() !== '') ? data.clientId : (existingContract.clientId ? String(existingContract.clientId) : null);
@@ -456,20 +443,38 @@ export const actions: Actions = {
 
 		const contractId = Number(id);
 		try {
-			await db.update(contracts).set({
-				...toContractDbValues(data),
-				clientId: finalClientId ? Number(finalClientId) : null,
-				orderClientId: finalOrderClientId ? Number(finalOrderClientId) : null,
-				attachmentFileListId
-			}).where(eq(contracts.contractId, contractId));
+			await db.transaction(async (tx) => {
+				// 파일 soft-delete는 트랜잭션 안에서 (DB 업데이트와 원자적으로)
+				let attachmentFileListId = existingContract.attachmentFileListId;
+				if (newAttachmentFileListId) {
+					if (attachmentFileListId) {
+						await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, attachmentFileListId), isNull(files.deletedAt)));
+					}
+					attachmentFileListId = newAttachmentFileListId;
+				} else if (removeAttachment && attachmentFileListId) {
+					await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, attachmentFileListId), isNull(files.deletedAt)));
+					attachmentFileListId = null;
+				}
 
-			await updateClientContacts(db, formData, finalClientId, finalOrderClientId);
-			await saveSubData(db, contractId, formData, true);
+				await tx.update(contracts).set({
+					...toContractDbValues(data),
+					clientId: finalClientId ? Number(finalClientId) : null,
+					orderClientId: finalOrderClientId ? Number(finalOrderClientId) : null,
+					attachmentFileListId
+				}).where(eq(contracts.contractId, contractId));
+
+				await updateClientContacts(tx, formData, finalClientId, finalOrderClientId);
+				await saveSubData(tx, contractId, formData, true);
+			});
 		} catch {
 			return { success: false, message: '계약 수정 중 오류가 발생했습니다.' };
 		}
 
-		await saveDocuments(contractId, formData);
+		try {
+			await saveDocuments(contractId, formData);
+		} catch {
+			return { success: false, message: '관련문서 저장에 실패했습니다.' };
+		}
 
 		return { success: true };
 	},

@@ -1,9 +1,9 @@
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { clients } from '$lib/server/db/schema';
-import { handleFileUpload, getFileNamesByListId } from '$lib/server/file-storage';
-import { batchFetchFileNames } from '$lib/server/query-helpers';
-import { softDeleteWithFiles, updateFileAttachment, parseDeleteIds } from '$lib/server/crud-helpers';
+import { clients, files } from '$lib/server/db/schema';
+import { handleFileUpload, saveFileToList } from '$lib/server/file-storage';
+import { batchFetchFileNames, escapeLike } from '$lib/server/query-helpers';
+import { softDeleteWithFiles, parseDeleteIds } from '$lib/server/crud-helpers';
 import { eq, like, sql, count, or, and, isNull, desc } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ url, depends, parent }) => {
@@ -14,66 +14,62 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const searchQuery = url.searchParams.get('search') || '';
 	const searchField = url.searchParams.get('field') || 'customerName';
 	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSize = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
 
 	// 검색 조건 구성
 	let whereCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
+		const escaped = escapeLike(searchQuery);
 		if (searchField === 'customerName') {
 			// name1~5 중 하나라도 매칭되면 포함
-			conditions.push(like(clients.name1, `%${searchQuery}%`));
-			conditions.push(like(clients.name2, `%${searchQuery}%`));
-			conditions.push(like(clients.name3, `%${searchQuery}%`));
-			conditions.push(like(clients.name4, `%${searchQuery}%`));
-			conditions.push(like(clients.name5, `%${searchQuery}%`));
+			conditions.push(like(clients.name1, `%${escaped}%`));
+			conditions.push(like(clients.name2, `%${escaped}%`));
+			conditions.push(like(clients.name3, `%${escaped}%`));
+			conditions.push(like(clients.name4, `%${escaped}%`));
+			conditions.push(like(clients.name5, `%${escaped}%`));
 		} else if (searchField === 'businessNumber') {
-			conditions.push(like(clients.businessNumber, `%${searchQuery}%`));
+			conditions.push(like(clients.businessNumber, `%${escaped}%`));
 		} else if (searchField === 'phone') {
 			// 하이픈 무시 검색
-			const cleanQuery = searchQuery.replace(/-/g, '');
+			const cleanQuery = escapeLike(searchQuery.replace(/-/g, ''));
 			conditions.push(sql`replace(${clients.mainContactPhone}, '-', '') LIKE ${'%' + cleanQuery + '%'}`);
 			conditions.push(sql`replace(${clients.subContactPhone}, '-', '') LIKE ${'%' + cleanQuery + '%'}`);
 		} else if (searchField === 'email') {
-			conditions.push(like(clients.mainContactEmail, `%${searchQuery}%`));
-			conditions.push(like(clients.subContactEmail, `%${searchQuery}%`));
+			conditions.push(like(clients.mainContactEmail, `%${escaped}%`));
+			conditions.push(like(clients.subContactEmail, `%${escaped}%`));
 		} else if (searchField === 'address') {
-			conditions.push(like(clients.address, `%${searchQuery}%`));
+			conditions.push(like(clients.address, `%${escaped}%`));
+		} else if (searchField === 'registrationFileName') {
+			// 사업자등록증 파일명 검색 - files 테이블과 EXISTS 서브쿼리
+			const searchLower = escapeLike(searchQuery.toLowerCase());
+			conditions.push(sql`EXISTS (
+				SELECT 1 FROM files f
+				WHERE f.FILE_LIST_ID = ${clients.registrationFileListId}
+				AND f.deleted_at IS NULL
+				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
+			)`);
 		}
 		if (conditions.length > 0) {
 			whereCondition = or(...conditions);
 		}
 	}
 
-	// 파일명 검색의 경우 모든 데이터를 가져와서 필터링 (삭제되지 않은 것만)
 	const deletedAtCondition = isNull(clients.deletedAt);
 	const finalWhereCondition = whereCondition
 		? and(whereCondition, deletedAtCondition)
 		: deletedAtCondition;
-	let allRows = await db.select().from(clients).where(finalWhereCondition).orderBy(desc(clients.clientId));
 
-	// 파일명으로 검색하는 경우
-	if (searchQuery.trim() && searchField === 'registrationFileName') {
-		const filteredRows = [];
-		for (const row of allRows) {
-			const registrationFileNames = await getFileNamesByListId(row.registrationFileListId);
-
-			const matches = registrationFileNames.some(fileName =>
-				fileName.toLowerCase().includes(searchQuery.toLowerCase())
-			);
-
-			if (matches) {
-				filteredRows.push(row);
-			}
-		}
-		allRows = filteredRows;
-	}
-
-	const totalCount = allRows.length;
-
-	// 페이지네이션 적용
 	const offset = (page - 1) * pageSize;
-	const rows = allRows.slice(offset, offset + pageSize);
+
+	// DB 레벨 페이지네이션
+	const [countResult, rows] = await Promise.all([
+		db.select({ count: count() }).from(clients).where(finalWhereCondition),
+		db.select().from(clients).where(finalWhereCondition).orderBy(desc(clients.clientId)).limit(pageSize).offset(offset)
+	]);
+
+	const totalCount = countResult[0]?.count ?? 0;
 
 	const fileNamesMap = await batchFetchFileNames(rows.map(r => r.registrationFileListId));
 
@@ -232,42 +228,58 @@ export const actions: Actions = {
 			};
 		}
 
-		const { fileListId: registrationFileListId, error: fileError } = await updateFileAttachment({
-			formData,
-			fieldName: 'registrationFile',
-			removeFieldName: 'removeRegistrationFile',
-			category: 'clients',
-			currentFileListId: existingClient.registrationFileListId
-		});
-		if (fileError) return fileError;
+		// 새 파일 업로드 - 트랜잭션 밖에서 (disk I/O)
+		const regFile = formData.get('registrationFile');
+		let newRegistrationFileListId: string | null = null;
+		if (regFile instanceof File && regFile.size > 0) {
+			try {
+				newRegistrationFileListId = await saveFileToList({ file: regFile, category: 'clients' });
+			} catch {
+				return { success: false, message: '파일 저장에 실패했습니다.' };
+			}
+		}
+		const removeRegistrationFile = formData.get('removeRegistrationFile') === 'true';
 
-		await db
-			.update(clients)
-			.set({
-				name1,
-				name2: name2 || null,
-				name3: name3 || null,
-				name4: name4 || null,
-				name5: name5 || null,
-				businessNumber: businessNumber || null,
-				zipCode: zipCode || null,
-				address: address || null,
-				fax: fax || null,
-				mainContactName: mainContactName || null,
-				mainContactPosition: mainContactPosition || null,
-				mainContactPhone: mainContactPhone || null,
-				mainContactEmail: mainContactEmail || null,
-				subContactName: subContactName || null,
-				subContactPosition: subContactPosition || null,
-				subContactPhone: subContactPhone || null,
-				subContactEmail: subContactEmail || null,
-				registrationFileListId
-			})
-			.where(eq(clients.clientId, Number(id)));
+		// 파일 soft-delete + DB 업데이트를 트랜잭션으로 묶음
+		try {
+			await db.transaction(async (tx) => {
+				let registrationFileListId = existingClient.registrationFileListId;
+				if (newRegistrationFileListId) {
+					if (registrationFileListId) {
+						await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, registrationFileListId), isNull(files.deletedAt)));
+					}
+					registrationFileListId = newRegistrationFileListId;
+				} else if (removeRegistrationFile && registrationFileListId) {
+					await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, registrationFileListId), isNull(files.deletedAt)));
+					registrationFileListId = null;
+				}
 
-		return {
-			success: true
-		};
+				await tx.update(clients).set({
+					name1,
+					name2: name2 || null,
+					name3: name3 || null,
+					name4: name4 || null,
+					name5: name5 || null,
+					businessNumber: businessNumber || null,
+					zipCode: zipCode || null,
+					address: address || null,
+					fax: fax || null,
+					mainContactName: mainContactName || null,
+					mainContactPosition: mainContactPosition || null,
+					mainContactPhone: mainContactPhone || null,
+					mainContactEmail: mainContactEmail || null,
+					subContactName: subContactName || null,
+					subContactPosition: subContactPosition || null,
+					subContactPhone: subContactPhone || null,
+					subContactEmail: subContactEmail || null,
+					registrationFileListId
+				}).where(eq(clients.clientId, Number(id)));
+			});
+		} catch {
+			return { success: false, message: '고객사 수정 중 오류가 발생했습니다.' };
+		}
+
+		return { success: true };
 	},
 	deleteClients: async ({ request }) => {
 		const formData = await request.formData();

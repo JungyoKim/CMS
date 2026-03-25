@@ -5,7 +5,7 @@ import { db } from '$lib/server/db';
 import { files } from '$lib/server/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 
-const UPLOAD_ROOT = process.env.UPLOAD_DIR ?? path.join(process.cwd(), 'uploads');
+export const UPLOAD_ROOT = process.env.UPLOAD_DIR ?? path.join(process.cwd(), 'uploads');
 
 type SaveFileParams = {
 	file: File;
@@ -42,15 +42,21 @@ export async function saveFileToList({ file, listId, category }: SaveFileParams)
 	const buf = Buffer.from(await file.arrayBuffer());
 	await fs.writeFile(fullPath, buf);
 
-	await db.insert(files).values({
-		fileListId: fileListId,
-		title: null,
-		originalFileName: original,
-		storedFilePath: fullPath,
-		extension: ext || null,
-		fileSize: buf.length,
-		deletedAt: null
-	});
+	try {
+		await db.insert(files).values({
+			fileListId: fileListId,
+			title: null,
+			originalFileName: original,
+			storedFilePath: fullPath,
+			extension: ext || null,
+			fileSize: buf.length,
+			deletedAt: null
+		});
+	} catch (err) {
+		// DB 기록 실패 시 고아 파일 정리
+		await fs.unlink(fullPath).catch(() => {});
+		throw err;
+	}
 
 	return fileListId;
 }

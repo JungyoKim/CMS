@@ -1,7 +1,8 @@
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { asRecords, contracts, clients, products, protocols } from '$lib/server/db/schema';
-import { handleFileUpload, getFileNamesByListId, deleteFilesByListId } from '$lib/server/file-storage';
+import { asRecords, contracts, clients, files } from '$lib/server/db/schema';
+import { handleFileUpload, saveFileToList, deleteFilesByListId } from '$lib/server/file-storage';
+import { batchFetchFileNames, escapeLike } from '$lib/server/query-helpers';
 import { eq, and, isNull, isNotNull, desc, or, like, count, inArray, gte, lte } from 'drizzle-orm';
 
 import { alias } from 'drizzle-orm/sqlite-core';
@@ -40,7 +41,8 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		}
 	}
 	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSize = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
 	const offset = (page - 1) * pageSize;
 
 	// clients 테이블 별칭 생성 (계약 고객사 vs 단일 AS 고객사 구분)
@@ -64,7 +66,8 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	// 검색 조건 구성 (DB SQL용)
 	let searchCondition = undefined;
 	if (searchQuery.trim()) {
-		const q = `%${searchQuery}%`;
+		const escaped = escapeLike(searchQuery);
+		const q = `%${escaped}%`;
 		switch (searchField) {
 			case 'customerName':
 				searchCondition = or(
@@ -174,36 +177,37 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 		getOptimizedCount()
 	]);
 
-	// 데이터 포맷팅
-	const items = await Promise.all(
-		asResults.map(async (row: typeof asResults[number]) => {
-			const { asRecord, contract, contractClient, directClient } = row;
+	// 데이터 포맷팅 - 배치 조회로 N+1 방지
+	const asFileListIds = asResults.map(r => r.asRecord.fileListId);
+	const asFileNamesMap = await batchFetchFileNames(asFileListIds);
 
-			// 계약 고객사가 있으면 우선, 없으면 단일 고객사
-			const client = contractClient || directClient;
-			const customerName = [client?.name1, client?.name2, client?.name3, client?.name4, client?.name5]
-				.filter(Boolean)
-				.join(' ') || '-';
+	const items = asResults.map((row: typeof asResults[number]) => {
+		const { asRecord, contract, contractClient, directClient } = row;
 
-			const photoFileNames = await getFileNamesByListId(asRecord.fileListId);
+		// 계약 고객사가 있으면 우선, 없으면 단일 고객사
+		const client = contractClient || directClient;
+		const customerName = [client?.name1, client?.name2, client?.name3, client?.name4, client?.name5]
+			.filter(Boolean)
+			.join(' ') || '-';
 
-			return {
-				id: asRecord.asId,
-				contractId: asRecord.contractId,
-				clientId: asRecord.clientId,
-				customerName,
-				contractName: contract?.name || (asRecord.contractId === null ? '단일 AS' : '-'),
-				requestDate: asRecord.requestDate || '',
-				requestContent: asRecord.requestContent || '',
-				responseDate: asRecord.responseDate || '',
-				responseContent: asRecord.responseContent || '',
-				cost: asRecord.cost || 0,
-				isCompleted: asRecord.isCompleted === 1,
-				photoFileName: photoFileNames[0] || null,
-				photoFileListId: asRecord.fileListId
-			};
-		})
-	);
+		const photoFileNames = asRecord.fileListId ? asFileNamesMap.get(asRecord.fileListId) || [] : [];
+
+		return {
+			id: asRecord.asId,
+			contractId: asRecord.contractId,
+			clientId: asRecord.clientId,
+			customerName,
+			contractName: contract?.name || (asRecord.contractId === null ? '단일 AS' : '-'),
+			requestDate: asRecord.requestDate || '',
+			requestContent: asRecord.requestContent || '',
+			responseDate: asRecord.responseDate || '',
+			responseContent: asRecord.responseContent || '',
+			cost: asRecord.cost || 0,
+			isCompleted: asRecord.isCompleted === 1,
+			photoFileName: photoFileNames[0] || null,
+			photoFileListId: asRecord.fileListId
+		};
+	});
 
 	return {
 		asRecords: items,
@@ -288,6 +292,14 @@ export const actions: Actions = {
 			};
 		}
 
+		if (asType === 'contract' && !contractId) {
+			return { success: false, message: '계약을 선택하세요.' };
+		}
+
+		if (asType === 'single' && !clientId) {
+			return { success: false, message: '고객사를 선택하세요.' };
+		}
+
 		// 기존 레코드 조회
 		const [existingRecord] = await db
 			.select()
@@ -295,95 +307,78 @@ export const actions: Actions = {
 			.where(eq(asRecords.asId, id))
 			.limit(1);
 
-
 		if (!existingRecord) {
-			return {
-				success: false,
-				message: 'AS 기록을 찾을 수 없습니다.'
-			};
+			return { success: false, message: 'AS 기록을 찾을 수 없습니다.' };
 		}
 
-		let fileListId = existingRecord.fileListId;
-
-		// 새 파일 업로드
-		const { fileListId: newFileListId, error: fileError } = await handleFileUpload(formData, 'asFile', 'as', fileListId);
-		if (fileError) return fileError;
-		if (newFileListId) {
-			fileListId = newFileListId;
-		} else if (removeFile && fileListId) {
-			// 파일 삭제 요청
-			await deleteFilesByListId(fileListId);
-			fileListId = null;
+		// 새 파일 업로드 - 트랜잭션 밖에서 (disk I/O)
+		let newFileListId: string | null = null;
+		const asFile = formData.get('asFile');
+		if (asFile instanceof File && asFile.size > 0) {
+			try {
+				newFileListId = await saveFileToList({ file: asFile, category: 'as' });
+			} catch {
+				return { success: false, message: '파일 저장에 실패했습니다.' };
+			}
 		}
 
-		if (asType === 'contract' && !contractId) {
-			return {
-				success: false,
-				message: '계약을 선택하세요.'
-			};
-		}
+		await db.transaction(async (tx) => {
+			// 파일 soft-delete는 트랜잭션 안에서 (DB 업데이트와 원자적으로)
+			let fileListId = existingRecord.fileListId;
+			if (newFileListId) {
+				if (fileListId) {
+					await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, fileListId), isNull(files.deletedAt)));
+				}
+				fileListId = newFileListId;
+			} else if (removeFile && fileListId) {
+				await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, fileListId), isNull(files.deletedAt)));
+				fileListId = null;
+			}
 
-		if (asType === 'single' && !clientId) {
-			return {
-				success: false,
-				message: '고객사를 선택하세요.'
-			};
-		}
+			await tx
+				.update(asRecords)
+				.set({
+					contractId: asType === 'contract' && contractId ? parseInt(contractId, 10) : null,
+					clientId: asType === 'single' && clientId ? parseInt(clientId, 10) : null,
+					requestDate,
+					requestContent,
+					responseDate,
+					responseContent,
+					cost,
+					isCompleted,
+					fileListId
+				})
+				.where(eq(asRecords.asId, id));
+		});
 
-		await db
-			.update(asRecords)
-			.set({
-				contractId: asType === 'contract' && contractId ? parseInt(contractId, 10) : null,
-				clientId: asType === 'single' && clientId ? parseInt(clientId, 10) : null,
-				requestDate,
-				requestContent,
-				responseDate,
-				responseContent,
-				cost,
-				isCompleted,
-				fileListId
-			})
-			.where(eq(asRecords.asId, id));
-
-
-		return {
-			success: true
-		};
+		return { success: true };
 	},
 	deleteASRecords: async ({ request }) => {
 		const formData = await request.formData();
 		const ids = formData.getAll('ids').map(id => Number(id));
 
 		if (ids.length === 0) {
-			return {
-				success: false,
-				message: '삭제할 항목을 선택하세요.'
-			};
+			return { success: false, message: '삭제할 항목을 선택하세요.' };
 		}
 
 		// 삭제할 항목들의 FILE_LIST_ID 조회
-		const rowsToDelete: { fileListId: string | null }[] = await db
+		const rowsToDelete = await db
 			.select({ fileListId: asRecords.fileListId })
 			.from(asRecords)
 			.where(inArray(asRecords.asId, ids));
 
-
-		// 각 항목의 파일 삭제
-		for (const row of rowsToDelete) {
-			if (row.fileListId) {
-				await deleteFilesByListId(row.fileListId);
+		// 파일 soft-delete + AS 기록 hard-delete를 트랜잭션으로 묶음
+		await db.transaction(async (tx) => {
+			const deletedAt = new Date().toISOString();
+			for (const row of rowsToDelete) {
+				if (row.fileListId) {
+					await tx.update(files).set({ deletedAt }).where(and(eq(files.fileListId, row.fileListId), isNull(files.deletedAt)));
+				}
 			}
-		}
+			await tx.delete(asRecords).where(inArray(asRecords.asId, ids));
+		});
 
-		// Hard Deletion: AS 기록 삭제
-		await db
-			.delete(asRecords)
-			.where(inArray(asRecords.asId, ids));
-
-
-		return {
-			success: true
-		};
+		return { success: true };
 	}
 };
 

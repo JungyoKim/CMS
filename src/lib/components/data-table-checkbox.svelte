@@ -21,6 +21,6 @@
 	});
 </script>
 
-<div class="flex items-center justify-center" on:click|stopPropagation>
+<div class="flex items-center justify-center" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 	<Checkbox bind:checked {indeterminate} {...restProps} />
 </div>

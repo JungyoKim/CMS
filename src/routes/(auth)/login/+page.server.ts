@@ -3,7 +3,7 @@ import type { Actions } from './$types';
 import { createToken } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { passwords } from '$lib/server/db/schema';
-import { verifyPassword, hashPassword, isHashed } from '$lib/server/password';
+import { verifyPassword, hashPassword } from '$lib/server/password';
 import { eq } from 'drizzle-orm';
 
 // 쿠키 만료 시간: 7일 (고정)
@@ -14,24 +14,18 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const password = formData.get('password')?.toString();
 
-		// 비밀번호 검증 (DB에서 확인, 없으면 기본값 1234)
+		// 비밀번호 검증 (DB에서 확인, 없으면 기본값 1234로 초기화)
 		const storedPassword = await db.select().from(passwords).limit(1);
-		const currentPassword = storedPassword[0]?.password || '1234';
+		let currentPassword = storedPassword[0]?.password;
+
+		// DB에 비밀번호가 없으면 기본값 '1234'를 해시하여 초기화
+		if (!currentPassword) {
+			currentPassword = hashPassword('1234');
+			await db.insert(passwords).values({ password: currentPassword });
+		}
 
 		if (!password || !verifyPassword(password, currentPassword)) {
 			return fail(401, { error: '비밀번호가 올바르지 않습니다.' });
-		}
-
-		// 레거시 평문 비밀번호인 경우 해시로 자동 마이그레이션
-		if (!isHashed(currentPassword)) {
-			const hashed = hashPassword(password);
-			if (storedPassword.length > 0) {
-				await db.update(passwords)
-					.set({ password: hashed })
-					.where(eq(passwords.pwId, storedPassword[0].pwId));
-			} else {
-				await db.insert(passwords).values({ password: hashed });
-			}
 		}
 
 		// JWT 토큰 생성

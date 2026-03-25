@@ -6,6 +6,9 @@
 	import MoonIcon from "@tabler/icons-svelte/icons/moon";
 	import { toggleMode } from "mode-watcher";
 	import { page } from '$app/stores';
+	import { cn } from "$lib/utils.js";
+
+	let { class: className, ...restProps }: { class?: string; [key: string]: unknown } = $props();
 
 	const pageNames: Record<string, string> = {
 		'/': '홈',
@@ -18,7 +21,8 @@
 </script>
 
 <header
-	class="h-(--header-height) group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) flex shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear sticky top-0 z-50 bg-background md:static"
+	class={cn("h-(--header-height) group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) flex shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear sticky top-0 z-50 bg-background md:static", className)}
+	{...restProps}
 >
 	<div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
 		<Sidebar.Trigger class="-ms-1" />

@@ -90,8 +90,12 @@
 		pagination.pageIndex = currentPage - 1;
 	});
 
-	let previousPageSizeValue = $state(pageSizeSelectValue);
+	let previousPageSizeValue: string | undefined = $state(undefined);
 	$effect(() => {
+		if (previousPageSizeValue === undefined) {
+			previousPageSizeValue = pageSizeSelectValue;
+			return;
+		}
 		if (pageSizeSelectValue && pageSizeSelectValue !== previousPageSizeValue) {
 			const newPageSize = Number(pageSizeSelectValue);
 			if (!isNaN(newPageSize) && newPageSize !== pagination.pageSize) {
@@ -123,17 +127,17 @@
 	let editingRow = $state<Schema | null>(null);
 	let validationError = $state<string | null>(null);
 	let dialogCloseTimeout: ReturnType<typeof setTimeout> | null = null;
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let clientEditDialogOpen = $state(false);
 	let editingClientId = $state<number | null>(null);
 	let editingClientRow = $state<Schema | null>(null);
 	let submittingClient = $state(false);
 
 	let searchQuery = $state($page.url.searchParams.get('search') || '');
-	let searchField = $state<string | null>($page.url.searchParams.get('field') || null);
+	let searchField = $state<string | undefined>($page.url.searchParams.get('field') || undefined);
 
 	function executeSearch() {
-		const newUrl = executeSearchUtil('clients', searchQuery, searchField, $page.url);
+		const newUrl = executeSearchUtil('clients', searchQuery, searchField ?? null, $page.url);
 		if (newUrl) {
 			if (newUrl.searchParams.get('page') === '1') {
 				pagination.pageIndex = 0;
@@ -545,7 +549,7 @@
 		{#if validationError}
 			<div
 				class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4"
-				in:slide={{ axis: 'y', duration: 300, start: -20 }}
+				in:slide={{ axis: 'y', duration: 300 }}
 				out:slide={{ axis: 'y', duration: 300 }}
 			>
 				<Alert.Root variant="destructive" class="relative shadow-lg">
@@ -708,7 +712,6 @@
 				if (editingRow) {
 					// @ts-expect-error
 					const originalFileListId = editingRow.registrationFileListId;
-					// @ts-expect-error
 					if (
 						originalFileListId &&
 						!existingCustomerRegistrationFileListId &&
@@ -739,7 +742,7 @@
 					} else if (result.type === 'failure') {
 						const wasEditing = editingRow !== null;
 						const errorMessage =
-							result.data?.message ||
+							(result.data?.message as string) ||
 							(wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.');
 						toast.error(errorMessage);
 						console.error('Form action failed:', result);
@@ -847,7 +850,6 @@
 				if (editingClientRow) {
 					// @ts-expect-error
 					const originalFileListId = editingClientRow.registrationFileListId;
-					// @ts-expect-error
 					if (
 						originalFileListId &&
 						!existingCustomerRegistrationFileListId &&
@@ -878,7 +880,7 @@
 						submittingClient = false;
 						const wasEditing = editingClientRow !== null;
 						const errorMessage =
-							result.data?.message ||
+							(result.data?.message as string) ||
 							(wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.');
 						toast.error(errorMessage);
 						console.error('Form action failed:', result);

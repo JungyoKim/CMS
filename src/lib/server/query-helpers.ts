@@ -1,6 +1,14 @@
 import { db } from '$lib/server/db';
 import { asRecords, rooms, repeaters, installProducts, files, clients } from '$lib/server/db/schema';
-import { eq, inArray, like, and, isNull } from 'drizzle-orm';
+import { eq, inArray, like, and, isNull, or } from 'drizzle-orm';
+
+/**
+ * SQL LIKE 패턴에서 특수 와일드카드 문자(%, _)를 이스케이프합니다.
+ * 유저 입력을 LIKE 패턴에 삽입하기 전에 반드시 사용하세요.
+ */
+export function escapeLike(value: string): string {
+	return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
 
 /**
  * Create customer name from name parts
@@ -129,33 +137,26 @@ export async function batchFetchClients(clientIds: number[]): Promise<Map<number
 export async function batchFetchDocuments(contractIds: number[]): Promise<Map<number, { content: string; fileName: string; fileListId: string }[]>> {
     if (contractIds.length === 0) return new Map();
 
-    // Build the like pattern for all contract IDs
-    const patterns = contractIds.map(id => `contract-${id}-doc-%`);
-
-    // We need to use OR for multiple LIKE patterns
+    // 각 contractId에 대해 LIKE 조건을 OR로 결합하여 필요한 문서만 조회
+    const likeConditions = contractIds.map(id => like(files.fileListId, `contract-${id}-doc-%`));
     const allDocuments = await db.select().from(files)
         .where(and(
             isNull(files.deletedAt),
-            // Use a more specific approach - query all doc files and filter in memory
-            like(files.fileListId, 'contract-%-doc-%')
+            or(...likeConditions)
         ));
 
-    // Filter and group by contract ID
+    // Group by contract ID
     const map = new Map<number, { content: string; fileName: string; fileListId: string }[]>();
 
     for (const doc of allDocuments) {
         if (!doc.fileListId) continue;
 
-        // Extract contract ID from fileListId (format: contract-{id}-doc-{index})
         const match = doc.fileListId.match(/^contract-(\d+)-doc-/);
         if (!match) continue;
 
         const contractId = parseInt(match[1], 10);
-        if (!contractIds.includes(contractId)) continue;
-
         const list = map.get(contractId) || [];
 
-        // Check if we already have this fileListId
         if (!list.some(d => d.fileListId === doc.fileListId)) {
             list.push({
                 content: doc.title || '',

@@ -44,11 +44,13 @@ export const GET: RequestHandler = async ({ params }) => {
 	// 첨부 파일 이름 가져오기
 	const attachmentFileNames = await getFileNamesByListId(contract.attachmentFileListId);
 
-	// 객실, 중계기, 설치제품, AS기록 데이터 불러오기
-	const roomsData = await db.select().from(rooms).where(eq(rooms.contractId, contract.contractId));
-	const repeatersData = await db.select().from(repeaters).where(eq(repeaters.contractId, contract.contractId));
-	const installProductsData = await db.select().from(installProducts).where(eq(installProducts.contractId, contract.contractId));
-	const asRecordsData = await db.select().from(asRecords).where(eq(asRecords.contractId, contract.contractId));
+	// 객실, 중계기, 설치제품, AS기록 데이터 병렬 조회
+	const [roomsData, repeatersData, installProductsData, asRecordsData] = await Promise.all([
+		db.select().from(rooms).where(eq(rooms.contractId, contract.contractId)),
+		db.select().from(repeaters).where(eq(repeaters.contractId, contract.contractId)),
+		db.select().from(installProducts).where(eq(installProducts.contractId, contract.contractId)),
+		db.select().from(asRecords).where(eq(asRecords.contractId, contract.contractId))
+	]);
 
 	// 관련문서 데이터 불러오기 (삭제되지 않은 파일만)
 	const allDocuments = await db

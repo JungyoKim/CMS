@@ -12,26 +12,11 @@ export const POST: RequestHandler = async ({ request }) => {
             return json({ error: '유효하지 않은 페이지 크기입니다.' }, { status: 400 });
         }
 
-        // 설정값이 존재하는지 확인
-        const existingSetting = await db
-            .select()
-            .from(settings)
-            .where(eq(settings.key, 'defaultPageSize'))
-            .limit(1);
-
-        if (existingSetting.length > 0) {
-            // 업데이트
-            await db
-                .update(settings)
-                .set({ value: String(pageSize) })
-                .where(eq(settings.key, 'defaultPageSize'));
-        } else {
-            // 삽입
-            await db.insert(settings).values({
-                key: 'defaultPageSize',
-                value: String(pageSize)
-            });
-        }
+        // Upsert: 없으면 삽입, 있으면 업데이트
+        await db.insert(settings).values({
+            key: 'defaultPageSize',
+            value: String(pageSize)
+        }).onConflictDoUpdate({ target: settings.key, set: { value: String(pageSize) } });
 
         return json({ success: true, message: '페이지 설정이 저장되었습니다.' });
     } catch (error) {

@@ -5,6 +5,7 @@ import { files } from '$lib/server/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { UPLOAD_ROOT } from '$lib/server/file-storage';
 
 /**
  * FILE_LIST_ID로 파일 다운로드
@@ -31,6 +32,13 @@ export const GET: RequestHandler = async ({ params }) => {
 			.then(rows => rows[0]);
 
 		if (!fileRow || !fileRow.storedFilePath) {
+			return json({ error: '파일을 찾을 수 없습니다.' }, { status: 404 });
+		}
+
+		// 경로 traversal 방어: 저장된 경로가 UPLOAD_ROOT 내에 있는지 확인
+		const resolvedPath = path.resolve(fileRow.storedFilePath);
+		const resolvedRoot = path.resolve(UPLOAD_ROOT);
+		if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
 			return json({ error: '파일을 찾을 수 없습니다.' }, { status: 404 });
 		}
 

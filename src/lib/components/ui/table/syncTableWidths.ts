@@ -18,7 +18,7 @@ target.style.maxWidth = `${width}px`;
 const scrollContainer = node.querySelector('.scroll-body');
 const headerWrap = node.querySelector('.header-wrap') as HTMLElement;
 if (scrollContainer && headerWrap) {
-    const scrollbarWidth = scrollContainer.offsetWidth - scrollContainer.clientWidth;
+    const scrollbarWidth = (scrollContainer as HTMLElement).offsetWidth - scrollContainer.clientWidth;
     headerWrap.style.paddingRight = `${scrollbarWidth}px`;
 }
 }

@@ -12,9 +12,8 @@ export function hashPassword(password: string): string {
 export function verifyPassword(password: string, stored: string): boolean {
 	const [salt, hash] = stored.split(':');
 
-	// salt:hash 형식이 아니면 레거시 평문 비밀번호
-	if (!salt || !hash || stored.indexOf(':') === -1) {
-		return password === stored;
+	if (!salt || !hash) {
+		return false;
 	}
 
 	const hashBuffer = Buffer.from(hash, 'hex');

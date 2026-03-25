@@ -36,6 +36,17 @@ nginx/logs/*
 # 업로드 파일
 uploads/*
 
+# 테스트 및 커버리지
+coverage-report/
+test-results/
+cov.log
+cov-summary.txt
+coverage-out.log
+coverage-output.txt
+
+# Playwright
+/playwright-report/
+
 # 아카이브 파일
 *.tar
 *.tar.gz

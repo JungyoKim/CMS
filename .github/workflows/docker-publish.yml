@@ -1,4 +1,4 @@
-name: Docker 이미지 빌드 및 배포
+name: 테스트 및 Docker 이미지 빌드/배포
 
 on:
   push:
@@ -11,7 +11,26 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 단위 테스트 실행
+        run: npm test
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

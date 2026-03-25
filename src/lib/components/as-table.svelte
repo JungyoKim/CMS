@@ -183,10 +183,14 @@
 		previousContractEditDialogOpen = contractEditDialogOpen;
 	});
 
-	let previousPageSizeValue = $state(pageSizeSelectValue);
+	let previousPageSizeValue: string | undefined = $state(undefined);
 
 	// Handle page size change
 	$effect(() => {
+		if (previousPageSizeValue === undefined) {
+			previousPageSizeValue = pageSizeSelectValue;
+			return;
+		}
 		if (pageSizeSelectValue && pageSizeSelectValue !== previousPageSizeValue) {
 			const newPageSize = Number(pageSizeSelectValue);
 			if (!isNaN(newPageSize) && newPageSize !== pagination.pageSize) {
@@ -264,7 +268,7 @@
 	let dialogCloseTimeout: ReturnType<typeof setTimeout> | null = null;
 	let validationError = $state<string | null>(null);
 	let submittingAS = $state(false);
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 
 	// 다이얼로그 열릴 때 옵션 로드
 	$effect(() => {
@@ -298,7 +302,7 @@
 	// 고객사 수정 폼 상태
 	let editingClientRow = $state<any>(null);
 	let submittingClient = $state(false);
-	let clientDialogScrollContainer: HTMLDivElement | null = null;
+	let clientDialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let newCustomerName = $state('');
 	let newCustomerSource = $state('');
 	let newCustomerItem3 = $state('');
@@ -1786,7 +1790,7 @@
 <!-- 계약 수정 Dialog -->
 <HomeContractDialog
 	bind:open={contractEditDialogOpen}
-	bind:editingRow={editingContractRow}
+	bind:contract={editingContractRow}
 	clientList={internalClientList.map((client) => ({
 		id: client.id,
 		name: client.customerName,

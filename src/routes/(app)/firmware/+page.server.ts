@@ -1,9 +1,9 @@
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { protocols } from '$lib/server/db/schema';
-import { handleFileUpload, getFileNamesByListId } from '$lib/server/file-storage';
-import { batchFetchFileNames } from '$lib/server/query-helpers';
-import { softDeleteWithFiles, updateFileAttachment, parseDeleteIds } from '$lib/server/crud-helpers';
+import { protocols, files } from '$lib/server/db/schema';
+import { handleFileUpload, getFileNamesByListId, saveFileToList } from '$lib/server/file-storage';
+import { batchFetchFileNames, escapeLike } from '$lib/server/query-helpers';
+import { softDeleteWithFiles, parseDeleteIds } from '$lib/server/crud-helpers';
 import { eq, like, sql, count, or, and, isNull, desc } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ url, depends, parent }) => {
@@ -41,59 +41,56 @@ export const load: PageServerLoad = async ({ url, depends, parent }) => {
 	const searchQuery = url.searchParams.get('search') || '';
 	const searchField = url.searchParams.get('field') || 'name';
 	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-	const pageSize = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSizeRaw = parseInt(url.searchParams.get('pageSize') || String(defaultPageSize), 10);
+	const pageSize = isNaN(pageSizeRaw) || pageSizeRaw <= 0 ? defaultPageSize : pageSizeRaw;
 
 	// 검색 조건 구성
 	let whereCondition = undefined;
 	if (searchQuery.trim()) {
 		const conditions = [];
+		const escaped = escapeLike(searchQuery);
 		if (searchField === 'name') {
-			conditions.push(like(protocols.name, `%${searchQuery}%`));
+			conditions.push(like(protocols.name, `%${escaped}%`));
 		} else if (searchField === 'memo') {
-			conditions.push(like(protocols.memo, `%${searchQuery}%`));
+			conditions.push(like(protocols.memo, `%${escaped}%`));
+		} else if (searchField === 'firmwareFileName') {
+			// 펌웨어 파일명 검색 - files 테이블과 EXISTS 서브쿼리
+			const searchLower = escapeLike(searchQuery.toLowerCase());
+			conditions.push(sql`EXISTS (
+				SELECT 1 FROM files f
+				WHERE f.FILE_LIST_ID = ${protocols.firmwareFileListId}
+				AND f.deleted_at IS NULL
+				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
+			)`);
+		} else if (searchField === 'docFileName') {
+			// 기타문서 파일명 검색 - files 테이블과 EXISTS 서브쿼리
+			const searchLower = escapeLike(searchQuery.toLowerCase());
+			conditions.push(sql`EXISTS (
+				SELECT 1 FROM files f
+				WHERE f.FILE_LIST_ID = ${protocols.otherDocsFileListId}
+				AND f.deleted_at IS NULL
+				AND LOWER(f.original_file_name) LIKE ${'%' + searchLower + '%'}
+			)`);
 		}
 		if (conditions.length > 0) {
 			whereCondition = or(...conditions);
 		}
 	}
 
-	// 파일명 검색의 경우 모든 데이터를 가져와서 필터링 (삭제되지 않은 것만)
 	const deletedAtCondition = isNull(protocols.deletedAt);
 	const finalWhereCondition = whereCondition
 		? and(whereCondition, deletedAtCondition)
 		: deletedAtCondition;
-	let allRows = await db.select().from(protocols).where(finalWhereCondition).orderBy(desc(protocols.protocolId));
 
-	// 파일명으로 검색하는 경우
-	if (searchQuery.trim() && (searchField === 'firmwareFileName' || searchField === 'docFileName')) {
-		const filteredRows = [];
-		for (const row of allRows) {
-			const firmwareFileNames = await getFileNamesByListId(row.firmwareFileListId);
-			const docFileNames = await getFileNamesByListId(row.otherDocsFileListId);
-
-			let matches = false;
-			if (searchField === 'firmwareFileName') {
-				matches = firmwareFileNames.some(fileName =>
-					fileName.toLowerCase().includes(searchQuery.toLowerCase())
-				);
-			} else if (searchField === 'docFileName') {
-				matches = docFileNames.some(fileName =>
-					fileName.toLowerCase().includes(searchQuery.toLowerCase())
-				);
-			}
-
-			if (matches) {
-				filteredRows.push(row);
-			}
-		}
-		allRows = filteredRows;
-	}
-
-	const totalCount = allRows.length;
-
-	// 페이지네이션 적용
 	const offset = (page - 1) * pageSize;
-	const rows = allRows.slice(offset, offset + pageSize);
+
+	// DB 레벨 페이지네이션
+	const [countResult, rows] = await Promise.all([
+		db.select({ count: count() }).from(protocols).where(finalWhereCondition),
+		db.select().from(protocols).where(finalWhereCondition).orderBy(desc(protocols.protocolId)).limit(pageSize).offset(offset)
+	]);
+
+	const totalCount = countResult[0]?.count ?? 0;
 
 	const allFileListIds = [
 		...rows.map(r => r.firmwareFileListId),
@@ -192,38 +189,67 @@ export const actions: Actions = {
 			};
 		}
 
-		const { fileListId: firmwareFileListId, error: binError } = await updateFileAttachment({
-			formData,
-			fieldName: 'firmwareBinFile',
-			removeFieldName: 'removeFirmwareFile',
-			category: 'firmware',
-			currentFileListId: existingFirmware.firmwareFileListId
-		});
-		if (binError) return binError;
+		// 새 파일 업로드 - 트랜잭션 밖에서 (disk I/O)
+		const binFile = formData.get('firmwareBinFile');
+		let newFirmwareFileListId: string | null = null;
+		if (binFile instanceof File && binFile.size > 0) {
+			try {
+				newFirmwareFileListId = await saveFileToList({ file: binFile, category: 'firmware' });
+			} catch {
+				return { success: false, message: '파일 저장에 실패했습니다.' };
+			}
+		}
+		const removeFirmwareFile = formData.get('removeFirmwareFile') === 'true';
 
-		const { fileListId: otherDocsFileListId, error: docError } = await updateFileAttachment({
-			formData,
-			fieldName: 'firmwareDocFile',
-			removeFieldName: 'removeDocFile',
-			category: 'firmware-docs',
-			currentFileListId: existingFirmware.otherDocsFileListId
-		});
-		if (docError) return docError;
+		const docFile = formData.get('firmwareDocFile');
+		let newDocFileListId: string | null = null;
+		if (docFile instanceof File && docFile.size > 0) {
+			try {
+				newDocFileListId = await saveFileToList({ file: docFile, category: 'firmware-docs' });
+			} catch {
+				return { success: false, message: '파일 저장에 실패했습니다.' };
+			}
+		}
+		const removeDocFile = formData.get('removeDocFile') === 'true';
 
-		await db
-			.update(protocols)
-			.set({
-				name,
-				version: version || null,
-				memo: memo || null,
-				firmwareFileListId,
-				otherDocsFileListId
-			})
-			.where(eq(protocols.protocolId, Number(id)));
+		// 파일 soft-delete + DB 업데이트를 트랜잭션으로 묶음
+		try {
+			await db.transaction(async (tx) => {
+				let firmwareFileListId = existingFirmware.firmwareFileListId;
+				if (newFirmwareFileListId) {
+					if (firmwareFileListId) {
+						await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, firmwareFileListId), isNull(files.deletedAt)));
+					}
+					firmwareFileListId = newFirmwareFileListId;
+				} else if (removeFirmwareFile && firmwareFileListId) {
+					await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, firmwareFileListId), isNull(files.deletedAt)));
+					firmwareFileListId = null;
+				}
 
-		return {
-			success: true
-		};
+				let otherDocsFileListId = existingFirmware.otherDocsFileListId;
+				if (newDocFileListId) {
+					if (otherDocsFileListId) {
+						await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, otherDocsFileListId), isNull(files.deletedAt)));
+					}
+					otherDocsFileListId = newDocFileListId;
+				} else if (removeDocFile && otherDocsFileListId) {
+					await tx.update(files).set({ deletedAt: new Date().toISOString() }).where(and(eq(files.fileListId, otherDocsFileListId), isNull(files.deletedAt)));
+					otherDocsFileListId = null;
+				}
+
+				await tx.update(protocols).set({
+					name,
+					version: version || null,
+					memo: memo || null,
+					firmwareFileListId,
+					otherDocsFileListId
+				}).where(eq(protocols.protocolId, Number(id)));
+			});
+		} catch {
+			return { success: false, message: '펌웨어 수정 중 오류가 발생했습니다.' };
+		}
+
+		return { success: true };
 	},
 	deleteFirmware: async ({ request }) => {
 		const formData = await request.formData();

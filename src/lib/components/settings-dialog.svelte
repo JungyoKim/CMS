@@ -41,13 +41,14 @@
 				<form
 					method="POST"
 					action="/settings?/changePassword"
-					use:enhance={() => {
+					use:enhance={({ cancel }) => {
 						// 클라이언트 측 검증: 현재 비밀번호와 새 비밀번호가 같은지 확인
 						if (password === newPassword) {
 							error = '현재 비밀번호와 새 비밀번호가 같습니다.';
 							success = null;
 							submitting = false;
-							return ({ cancel: true });
+							cancel();
+							return;
 						}
 						
 						submitting = true;

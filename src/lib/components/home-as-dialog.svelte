@@ -119,7 +119,7 @@
 	let responseDateOpen = $state(false);
 	let submitting = $state(false);
 	let validationError = $state<string | null>(null);
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 
 	// 내부 리스트 (옵션 로딩용)
 	let internalContractList = $state<any[]>([]);
@@ -840,7 +840,7 @@
 <!-- 계약 수정 Dialog -->
 <HomeContractDialog
 	bind:open={contractEditDialogOpen}
-	bind:editingRow={editingContractRow}
+	bind:contract={editingContractRow}
 	clientList={clientList.length > 0
 		? clientList
 		: internalClientList.map((c) => ({

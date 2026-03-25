@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ params }) => {
 	const product = await db
 		.select()
 		.from(products)
-		.where(eq(products.productId, Number(id)))
+		.where(and(eq(products.productId, Number(id)), isNull(products.deletedAt)))
 		.limit(1)
 		.then(rows => rows[0]);
 	

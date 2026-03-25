@@ -197,11 +197,7 @@ export async function saveSubData(
 				const record = asArray[i];
 				const file = formData.get(`asFile_${i}`);
 				if (file instanceof File && file.size > 0) {
-					try {
-						record.fileListId = await saveFileToList({ file, category: 'as' });
-					} catch (error) {
-						console.error(`Error saving AS file ${i}:`, error);
-					}
+					record.fileListId = await saveFileToList({ file, category: 'as' });
 				}
 			}
 
@@ -228,34 +224,26 @@ export async function saveDocuments(contractId: number, formData: FormData) {
 	const documentsRaw = formData.get('documentsData')?.toString();
 	if (!documentsRaw) return;
 
-	try {
-		const documentsArray = JSON.parse(documentsRaw);
-		if (!Array.isArray(documentsArray) || documentsArray.length === 0) return;
+	const documentsArray = JSON.parse(documentsRaw);
+	if (!Array.isArray(documentsArray) || documentsArray.length === 0) return;
 
-		for (let i = 0; i < documentsArray.length; i++) {
-			const doc = documentsArray[i];
-			const file = formData.get(`documentFile_${i}`);
+	for (let i = 0; i < documentsArray.length; i++) {
+		const doc = documentsArray[i];
+		const file = formData.get(`documentFile_${i}`);
 
-			if (file instanceof File && file.size > 0) {
-				try {
-					const contractFileListId = `contract-${contractId}-doc-${i}`;
-					const fileListId = await saveFileToList({
-						file,
-						category: 'contract-documents',
-						listId: contractFileListId,
-					});
+		if (file instanceof File && file.size > 0) {
+			const contractFileListId = `contract-${contractId}-doc-${i}`;
+			const fileListId = await saveFileToList({
+				file,
+				category: 'contract-documents',
+				listId: contractFileListId,
+			});
 
-					if (doc.content) {
-						await db.update(files)
-							.set({ title: doc.content })
-							.where(eq(files.fileListId, fileListId));
-					}
-				} catch (error) {
-					console.error(`Error saving document ${i}:`, error);
-				}
+			if (doc.content) {
+				await db.update(files)
+					.set({ title: doc.content })
+					.where(eq(files.fileListId, fileListId));
 			}
 		}
-	} catch (error) {
-		console.error('Error saving documents:', error);
 	}
 }

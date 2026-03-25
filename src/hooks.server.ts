@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { verifyToken } from '$lib/server/auth';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
@@ -14,9 +14,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const userAgent = event.request.headers.get('user-agent') || '';
 	const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
 
-	// 파일 업로드 크기 제한 제거 (무제한) 및 하이브리드 파비콘 처리
+	// 하이브리드 파비콘 처리 (bodySizeLimit은 svelte.config.js 어댑터 설정으로 제어)
 	const resolveOptions = {
-		bodySizeLimit: Infinity,
 		transformPageChunk: ({ html }: { html: string }) => {
 			const placeholder = '<script id="desktop-favicon-placeholder"></script>';
 
@@ -146,5 +145,26 @@ export const handle: Handle = async ({ event, resolve }) => {
 		userId: payload.userId
 	};
 
-	return resolve(event, resolveOptions);
+	const response = await resolve(event, resolveOptions);
+
+	// 보안 헤더
+	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+	return response;
+};
+
+export const handleError: HandleServerError = ({ error, event, status, message }) => {
+	const timestamp = new Date().toISOString();
+	const path = event.url.pathname;
+
+	if (status !== 404) {
+		console.error(`[${timestamp}] ERROR ${status} ${path}:`, error);
+	}
+
+	return {
+		message: dev ? (error instanceof Error ? error.message : message) : '서버 오류가 발생했습니다.',
+		code: status
+	};
 };

@@ -26,7 +26,10 @@ export const actions: Actions = {
 
 		// 현재 비밀번호 확인
 		const storedPassword = await db.select().from(passwords).limit(1);
-		const currentStoredPassword = storedPassword[0]?.password || '1234';
+		const currentStoredPassword = storedPassword[0]?.password;
+		if (!currentStoredPassword) {
+			return fail(400, { error: '저장된 비밀번호가 없습니다. 먼저 로그인하세요.' });
+		}
 
 		if (!verifyPassword(currentPassword, currentStoredPassword)) {
 			return fail(401, { error: '현재 비밀번호가 올바르지 않습니다.' });
@@ -56,14 +59,8 @@ export const actions: Actions = {
 
 		if (expirationType === 'never') {
 			// 만료 없음 설정
-			const existing = await db.select().from(settings).where(eq(settings.key, 'tokenExpiration')).limit(1);
-			if (existing.length > 0) {
-				await db.update(settings)
-					.set({ value: 'never' })
-					.where(eq(settings.key, 'tokenExpiration'));
-			} else {
-				await db.insert(settings).values({ key: 'tokenExpiration', value: 'never' });
-			}
+			await db.insert(settings).values({ key: 'tokenExpiration', value: 'never' })
+				.onConflictDoUpdate({ target: settings.key, set: { value: 'never' } });
 		} else {
 			if (!expirationValue) {
 				return fail(400, { error: '유효기간 값을 입력해주세요.' });
@@ -80,14 +77,8 @@ export const actions: Actions = {
 
 			// 설정 저장 (예: "minutes:30", "hours:2", "days:7")
 			const settingValue = `${expirationType}:${value}`;
-			const existing = await db.select().from(settings).where(eq(settings.key, 'tokenExpiration')).limit(1);
-			if (existing.length > 0) {
-				await db.update(settings)
-					.set({ value: settingValue })
-					.where(eq(settings.key, 'tokenExpiration'));
-			} else {
-				await db.insert(settings).values({ key: 'tokenExpiration', value: settingValue });
-			}
+			await db.insert(settings).values({ key: 'tokenExpiration', value: settingValue })
+				.onConflictDoUpdate({ target: settings.key, set: { value: settingValue } });
 		}
 
 		return { success: true };

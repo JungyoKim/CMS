@@ -91,8 +91,12 @@
 	});
 
 	// pageSizeSelectValue 변경 감지 및 페이지네이션 실행
-	let previousPageSizeValue = $state(pageSizeSelectValue);
+	let previousPageSizeValue: string | undefined = $state(undefined);
 	$effect(() => {
+		if (previousPageSizeValue === undefined) {
+			previousPageSizeValue = pageSizeSelectValue;
+			return;
+		}
 		if (pageSizeSelectValue && pageSizeSelectValue !== previousPageSizeValue) {
 			const newPageSize = Number(pageSizeSelectValue);
 			if (!isNaN(newPageSize) && newPageSize !== pagination.pageSize) {
@@ -124,7 +128,7 @@
 	let editingRow = $state<Schema | null>(null);
 	let validationError = $state<string | null>(null);
 	let dialogCloseTimeout: ReturnType<typeof setTimeout> | null = null;
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let firmwareEditDialogOpen = $state(false);
 	let editingFirmwareId = $state<number | null>(null);
 	let editingFirmwareRow = $state<Schema | null>(null);
@@ -133,11 +137,11 @@
 
 	// 로컬 상태로 검색어와 필드 관리
 	let searchQuery = $state($page.url.searchParams.get('search') || '');
-	let searchField = $state<string | null>($page.url.searchParams.get('field') || null);
+	let searchField = $state<string | undefined>($page.url.searchParams.get('field') || undefined);
 
 	// 검색 실행 함수
 	function executeSearch() {
-		const newUrl = executeSearchUtil('firmware', searchQuery, searchField, $page.url);
+		const newUrl = executeSearchUtil('firmware', searchQuery, searchField ?? null, $page.url);
 		if (newUrl) {
 			if (newUrl.searchParams.get('page') === '1') {
 				pagination.pageIndex = 0;
@@ -651,7 +655,7 @@
 					} else if (result.type === 'failure') {
 						const wasEditing = editingRow !== null;
 						const errorMessage =
-							result.data?.message ||
+							(result.data?.message as string) ||
 							(wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.');
 						toast.error(errorMessage);
 						console.error('Form action failed:', result);
@@ -767,7 +771,7 @@
 						await invalidateAll();
 						toast.success('펌웨어가 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = result.data?.message || '수정에 실패했습니다.';
+						const errorMessage = (result.data?.message as string) || '수정에 실패했습니다.';
 						toast.error(errorMessage);
 					}
 				};

@@ -208,7 +208,7 @@ export const load: PageServerLoad = async ({ depends }) => {
 		completedASData,
 		clientList: allClients.map(client => ({
 			id: client.clientId,
-			name: client.name || '',
+			name: [client.name1, client.name2, client.name3, client.name4, client.name5].filter(Boolean).join(' ') || '',
 			name1: client.name1,
 			name2: client.name2,
 			name3: client.name3,

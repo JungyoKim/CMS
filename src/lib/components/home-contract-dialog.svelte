@@ -76,7 +76,7 @@
 
 	// --- Form & Dialog State ---
 	let validationError = $state<string | null>(null);
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let submittingContract = $state(false);
 	let hasLoadedEditingRow = $state(false);
 
@@ -570,7 +570,6 @@
 
 		// @ts-expect-error
 		homeContractName = contract.name || '';
-		// @ts-expect-error
 		homeContractStatus = contract.status || 'active';
 		// @ts-expect-error
 		homeContractDate = stringToDateValue(contract.contractDate);
@@ -580,14 +579,13 @@
 		homeContractPreSalesDate = stringToDateValue(contract.salesStartDate);
 		// @ts-expect-error
 		homeContractAmount = contract.deposit ? formatCurrency(String(contract.deposit)) : '';
-		// @ts-expect-error
-		homeContractDownPayment = contract.prepayment
-			? formatCurrency(String(contract.prepayment))
+		homeContractDownPayment = (contract as any).prepayment
+			? formatCurrency(String((contract as any).prepayment))
 			: '';
 
-		if (contract.interimPaymentsData) {
+		if ((contract as any).interimPaymentsData) {
 			try {
-				const loadedInterim = JSON.parse(contract.interimPaymentsData);
+				const loadedInterim = JSON.parse((contract as any).interimPaymentsData);
 				homeContractInterimPayments = loadedInterim.map((i: any) => ({
 					id: i.id || crypto.randomUUID(),
 					amount: i.amount ? formatCurrency(String(i.amount)) : '',
@@ -604,9 +602,8 @@
 		}
 
 		try {
-			// @ts-expect-error
-			const loadedTaxInvoices = contract.taxInvoicesData
-				? JSON.parse(contract.taxInvoicesData)
+			const loadedTaxInvoices = (contract as any).taxInvoicesData
+				? JSON.parse((contract as any).taxInvoicesData)
 				: [];
 			homeContractTaxInvoices = loadedTaxInvoices.map((inv: any) => ({
 				id: crypto.randomUUID(),
@@ -620,8 +617,8 @@
 			console.error('Failed to parse tax invoices data', e);
 			homeContractTaxInvoices = [];
 		}
-		homeContractMaintenanceAmount = contract.maintenanceMonthlyAmount
-			? formatCurrency(String(contract.maintenanceMonthlyAmount))
+		homeContractMaintenanceAmount = (contract as any).maintenanceMonthlyAmount
+			? formatCurrency(String((contract as any).maintenanceMonthlyAmount))
 			: '';
 		// @ts-expect-error
 		homeContractTaxInvoiceDate = stringToDateValue(contract.taxInvoiceDate);
@@ -643,9 +640,8 @@
 		homeContractInstallName = contract.installerName || '';
 		// @ts-expect-error
 		homeContractInstallPhone = contract.installerPhone || '';
-		// @ts-expect-error
-		homeContractTaxInvoiceAmount = contract.taxInvoiceAmount
-			? formatCurrency(String(contract.taxInvoiceAmount))
+		homeContractTaxInvoiceAmount = (contract as any).taxInvoiceAmount
+			? formatCurrency(String((contract as any).taxInvoiceAmount))
 			: '';
 		// @ts-expect-error
 		homeContractTaxInvoiceIssueDate = stringToDateValue(contract.taxInvoiceIssueDate);
@@ -913,8 +909,8 @@
 		const newDoc = {
 			content: newDocumentContent,
 			file: newDocumentFile,
-			fileName: newDocumentFile ? newDocumentFile.name : existingDocumentFileName,
-			fileListId: newDocumentFile ? undefined : existingDocumentFileListId
+			fileName: newDocumentFile ? newDocumentFile.name : (existingDocumentFileName ?? undefined),
+			fileListId: newDocumentFile ? undefined : (existingDocumentFileListId ?? undefined)
 		};
 
 		if (editingDocument) {
@@ -1034,11 +1030,11 @@
 				formData.set('status', homeContractStatus);
 				formData.set(
 					'clientId',
-					homeContractCustomer || (contract ? String(contract.clientId) : '')
+					homeContractCustomer || (contract ? String((contract as any).clientId) : '')
 				);
 				formData.set(
 					'orderClientId',
-					homeContractOrderer || (contract ? String(contract.orderClientId) : '')
+					homeContractOrderer || (contract ? String((contract as any).orderClientId) : '')
 				);
 
 				// Dates & Amounts
@@ -1172,7 +1168,7 @@
 
 						// resetForm()과 contract = null은 onOpenChange에서 setTimeout으로 처리됨
 					} else if (result.type === 'failure') {
-						toast.error(result.data?.message || '작업 실패');
+						toast.error((result.data as any)?.message || '작업 실패');
 					}
 				};
 			}}
@@ -2763,7 +2759,6 @@
 													if (record.fileListId) {
 														downloadFile({
 															name: record.fileName!,
-															// @ts-expect-error
 															fileListId: record.fileListId
 														} as any);
 													}
@@ -3537,7 +3532,7 @@
 
 				if (editingClientRow) {
 					// Use editingClientId (set when loading) or fallback to clientId from API response
-					formData.set('id', String(editingClientId || editingClientRow.clientId));
+					formData.set('id', String(editingClientId || (editingClientRow as any).clientId));
 				}
 
 				formData.set('name1', newCustomerName || '');
@@ -3559,9 +3554,7 @@
 				formData.set('subContactEmail', newCustomerSubContactEmail || '');
 
 				if (editingClientRow) {
-					// @ts-expect-error
-					const originalFileListId = editingClientRow.registrationFileListId;
-					// @ts-expect-error
+					const originalFileListId = (editingClientRow as any).registrationFileListId;
 					if (
 						originalFileListId &&
 						!existingCustomerRegistrationFileListId &&
@@ -3627,7 +3620,7 @@
 					} else if (result.type === 'failure') {
 						const wasEditing = editingClientRow !== null;
 						const errorMessage =
-							result.data?.message ||
+							(result.data as any)?.message ||
 							(wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.');
 						toast.error(errorMessage);
 						console.error('Form action failed:', result);
@@ -4770,7 +4763,7 @@
 						await tick();
 						toast.success('펌웨어가 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = result.data?.message || '수정에 실패했습니다.';
+						const errorMessage = (result.data as any)?.message || '수정에 실패했습니다.';
 						toast.error(errorMessage);
 					}
 				};
@@ -4890,7 +4883,7 @@
 						await tick();
 						toast.success('제품이 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = result.data?.message || '수정에 실패했습니다.';
+						const errorMessage = (result.data as any)?.message || '수정에 실패했습니다.';
 						toast.error(errorMessage);
 					}
 				};

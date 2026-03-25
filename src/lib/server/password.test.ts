@@ -28,8 +28,9 @@ describe('verifyPassword', () => {
 		expect(verifyPassword('wrongpassword', hashed)).toBe(false);
 	});
 
-	it('레거시 평문 비밀번호를 올바르게 검증한다', () => {
-		expect(verifyPassword('1234', '1234')).toBe(true);
+	it('콜론이 없는 문자열(평문)은 검증 실패한다', () => {
+		// verifyPassword는 salt:hash 형식만 지원, 평문은 false 반환
+		expect(verifyPassword('1234', '1234')).toBe(false);
 		expect(verifyPassword('wrong', '1234')).toBe(false);
 	});
 

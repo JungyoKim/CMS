@@ -110,7 +110,7 @@
 	let isEditingMode = $state(false);
 	let validationError = $state<string | null>(null);
 	let dialogCloseTimeout: ReturnType<typeof setTimeout> | null = null;
-	let dialogScrollContainer: HTMLDivElement | null = null;
+	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let submittingProduct = $state(false);
 
 	// Product Form State
@@ -620,7 +620,7 @@
 		{#if validationError}
 			<div
 				class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4"
-				in:slide={{ axis: 'y', duration: 300, start: -20 }}
+				in:slide={{ axis: 'y', duration: 300 }}
 				out:slide={{ axis: 'y', duration: 300 }}
 			>
 				<Alert.Root variant="destructive" class="relative shadow-lg">
@@ -1443,7 +1443,7 @@
 						await invalidate('firmware:update');
 						toast.success('펌웨어가 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = result.data?.message || '수정에 실패했습니다.';
+						const errorMessage = (result.data?.message as string) || '수정에 실패했습니다.';
 						toast.error(errorMessage);
 					}
 				};

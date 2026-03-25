@@ -56,6 +56,8 @@
 	import FileUploadField from '$lib/components/ui/file-upload-field.svelte';
 	import TrashIcon from '@tabler/icons-svelte/icons/trash';
 	import PlusIcon from '@tabler/icons-svelte/icons/plus';
+	import LoaderIcon from '@tabler/icons-svelte/icons/loader';
+	import DotsVerticalIcon from '@tabler/icons-svelte/icons/dots-vertical';
 	import {
 		dateFormatter,
 		dateValueToString,
@@ -700,15 +702,11 @@
 			// @ts-expect-error
 			homeContractDownPayment = row.prepayment ? formatCurrency(String(row.prepayment)) : '';
 			// @ts-expect-error
-			homeContractInterimPayment = row.interimPayment
-				? formatCurrency(String(row.interimPayment))
-				: '';
+			homeContractInterimPayment = row.interimPayment ? formatCurrency(String((row as any).interimPayment)) : '';
 			// @ts-expect-error
 			homeContractTaxInvoiceDate = stringToDateValue(row.taxInvoiceDate);
 			// @ts-expect-error
-			homeContractMaintenanceAmount = row.maintenanceMonthlyAmount
-				? formatCurrency(String(row.maintenanceMonthlyAmount))
-				: '';
+			homeContractMaintenanceAmount = row.maintenanceMonthlyAmount ? formatCurrency(String((row as any).maintenanceMonthlyAmount)) : '';
 			// @ts-expect-error
 			homeContractBillingDate = row.billingDayOfMonth || '';
 			// @ts-expect-error
