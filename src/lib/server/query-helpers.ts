@@ -1,7 +1,7 @@
 import { db } from '$lib/server/db';
 import { asRecords, rooms, repeaters, installProducts, files, clients } from '$lib/server/db/schema';
 import { eq, inArray, like, and, isNull, or, count, desc } from 'drizzle-orm';
-import type { SQLWrapper } from 'drizzle-orm';
+import type { SQL, SQLWrapper } from 'drizzle-orm';
 import type { SQLiteTable, SQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -30,9 +30,9 @@ export function parseListParams(url: URL, defaultPageSize: number, defaultField 
 /**
  * 검색 조건과 deletedAt IS NULL 조건을 결합합니다.
  */
-export function withSoftDelete(deletedAtColumn: SQLiteColumn, searchCondition?: SQLWrapper) {
+export function withSoftDelete(deletedAtColumn: SQLiteColumn, searchCondition?: SQLWrapper): SQL<unknown> {
 	const deletedAtCondition = isNull(deletedAtColumn);
-	return searchCondition ? and(searchCondition, deletedAtCondition) : deletedAtCondition;
+	return searchCondition ? and(searchCondition, deletedAtCondition)! : deletedAtCondition;
 }
 
 /**
@@ -42,7 +42,7 @@ export function withSoftDelete(deletedAtColumn: SQLiteColumn, searchCondition?: 
 export async function paginatedQuery<T extends SQLiteTable>(
 	table: T,
 	options: {
-		where?: SQLWrapper;
+		where?: SQL<unknown>;
 		orderBy: SQLiteColumn;
 		limit: number;
 		offset: number;

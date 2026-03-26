@@ -3,10 +3,12 @@
 	import IncompleteASTable from "$lib/components/incomplete-as-table.svelte";
 	import CompletedASTable from "$lib/components/completed-as-table.svelte";
 
+	import type { Schema } from '$lib/components/schemas.js';
+
 	export let data: {
-		preSalesData: any[];
-		incompleteASData: any[];
-		completedASData: any[];
+		preSalesData: Schema[];
+		incompleteASData: Schema[];
+		completedASData: Schema[];
 		clientList: Array<{
 			id: number;
 			name: string;
@@ -43,19 +45,19 @@
 		<div class="flex flex-col gap-2 md:flex-1 md:min-h-0">
 			<h2 class="text-lg shrink-0">사전영업중 고객</h2>
 			<div class="md:flex-1 md:min-h-0">
-				<PreSalesTable data={data.preSalesData as any} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
+				<PreSalesTable data={data.preSalesData} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
 			</div>
 		</div>
 		<div class="flex flex-col gap-2 md:flex-1 md:min-h-0">
 			<h2 class="text-lg shrink-0">AS미완료</h2>
 			<div class="md:flex-1 md:min-h-0">
-				<IncompleteASTable data={data.incompleteASData as any} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
+				<IncompleteASTable data={data.incompleteASData} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
 			</div>
 		</div>
 		<div class="flex flex-col gap-2 md:flex-1 md:min-h-0">
 			<h2 class="text-lg shrink-0">최근 AS완료 고객</h2>
 			<div class="md:flex-1 md:min-h-0">
-				<CompletedASTable data={data.completedASData as any} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
+				<CompletedASTable data={data.completedASData} clientList={data.clientList} productList={data.productList} firmwareList={data.firmwareList} />
 			</div>
 		</div>
 	</div>

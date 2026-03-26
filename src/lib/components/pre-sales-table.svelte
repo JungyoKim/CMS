@@ -8,7 +8,7 @@
 		type Row,
 		type SortingState
 	} from '@tanstack/table-core';
-	import type { Schema } from './schemas.js';
+	import type { Schema, ContractData } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
@@ -41,7 +41,7 @@
 
 	// --- Dialog State ---
 	let homeContractDialogOpen = $state(false);
-	let homeContractEditingRow = $state<Schema | null>(null);
+	let homeContractEditingRow = $state<ContractData | null>(null);
 
 	// Define columns
 	const columns = $derived.by(() => {
@@ -55,7 +55,6 @@
 				accessorKey: 'customerName',
 				header: '고객명',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.customerName || '-';
 				}
 			},
@@ -63,7 +62,6 @@
 				accessorKey: 'orderer',
 				header: '발주사',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.orderer || '-';
 				}
 			},
@@ -71,7 +69,6 @@
 				accessorKey: 'name',
 				header: '계약명',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.name || '-';
 				}
 			},
@@ -79,7 +76,6 @@
 				accessorKey: 'amount',
 				header: '총계약금액',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const amount = row.original.amount || row.original.price || 0;
 					return amount ? new Intl.NumberFormat('ko-KR').format(Number(amount)) + '원' : '-';
 				}
@@ -88,7 +84,6 @@
 				accessorKey: 'address',
 				header: '주소',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.address || '-';
 				}
 			}
@@ -170,7 +165,6 @@
 				return;
 			}
 
-			// @ts-expect-error - Schema may not have contractId field
 			let contractId = row.original.contractId;
 			if (!contractId) {
 				contractId = row.original.id;
@@ -181,7 +175,7 @@
 					const response = await fetch(`/api/contracts/${contractId}`);
 					if (response.ok) {
 						const contractData = await response.json();
-						homeContractEditingRow = contractData;
+						homeContractEditingRow = contractData as ContractData;
 						homeContractDialogOpen = true;
 					} else {
 						toast.error('계약 데이터를 불러올 수 없습니다.');
@@ -210,7 +204,6 @@
 <div class="rounded-lg border flex flex-col md:h-full md:min-h-0 overflow-hidden">
 	<DragDropProvider
 		modifiers={[
-			// @ts-expect-error @dnd-kit/abstract types are botched atm
 			RestrictToVerticalAxis
 		]}
 		onDragEnd={(e) => (data = move(data, e))}

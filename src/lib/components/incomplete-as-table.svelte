@@ -56,7 +56,6 @@
 				accessorKey: 'customerName',
 				header: '고객명',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.customerName || '-';
 				}
 			},
@@ -64,7 +63,6 @@
 				accessorKey: 'address',
 				header: '주소',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.address || '-';
 				}
 			},
@@ -72,7 +70,6 @@
 				accessorKey: 'requestDate',
 				header: '접수일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const date = row.original.requestDate;
 					if (!date) return '-';
 					try {
@@ -86,7 +83,6 @@
 				accessorKey: 'requestContent',
 				header: '접수내용',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.requestContent || '-';
 				}
 			},
@@ -94,7 +90,6 @@
 				accessorKey: 'cost',
 				header: '비용',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const cost = row.original.cost;
 					return cost ? new Intl.NumberFormat('ko-KR').format(Number(cost)) + '원' : '-';
 				}
@@ -177,7 +172,6 @@
 				return;
 			}
 
-			// @ts-expect-error - Schema may not have asId field
 			const asId = row.original.asId || row.original.id;
 			if (asId) {
 				try {
@@ -213,7 +207,6 @@
 <div class="rounded-lg border flex flex-col md:h-full md:min-h-0 overflow-hidden">
 	<DragDropProvider
 		modifiers={[
-			// @ts-expect-error @dnd-kit/abstract types are botched atm
 			RestrictToVerticalAxis
 		]}
 		onDragEnd={(e) => (data = move(data, e))}

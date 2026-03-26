@@ -13,7 +13,7 @@
 		type SortingState,
 		type VisibilityState
 	} from '@tanstack/table-core';
-	import type { Schema } from './schemas.js';
+	import type { Schema, FirmwareEditData } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
@@ -131,7 +131,7 @@
 	let dialogScrollContainer = $state<HTMLDivElement | null>(null);
 	let firmwareEditDialogOpen = $state(false);
 	let editingFirmwareId = $state<number | null>(null);
-	let editingFirmwareRow = $state<Schema | null>(null);
+	let editingFirmwareRow = $state<FirmwareEditData | null>(null);
 	let loadingFirmwareId = $state<number | null>(null);
 	let submittingFirmware = $state(false);
 
@@ -231,7 +231,6 @@
 				accessorKey: 'name',
 				header: '이름',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.name || row.original.header || '-';
 				}
 			},
@@ -239,7 +238,6 @@
 				accessorKey: 'memo',
 				header: '메모',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.memo || '-';
 				}
 			},
@@ -247,9 +245,7 @@
 				accessorKey: 'docFileName',
 				header: '문서 파일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileName = row.original.docFileName;
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileListId = row.original.docFileListId;
 
 					if (!fileName || !fileListId) {
@@ -273,9 +269,7 @@
 				accessorKey: 'firmwareFileName',
 				header: '펌웨어 파일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileName = row.original.firmwareFileName;
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileListId = row.original.firmwareFileListId;
 
 					if (!fileName || !fileListId) {
@@ -616,9 +610,7 @@
 				}
 
 				if (editingRow) {
-					// @ts-expect-error
 					const originalFirmwareFileListId = editingRow.firmwareFileListId;
-					// @ts-expect-error
 					const originalDocFileListId = editingRow.docFileListId;
 
 					if (originalFirmwareFileListId && !existingFirmwareFileListId && !newFirmwareBinFile) {
@@ -739,9 +731,7 @@
 				}
 
 				if (editingFirmwareRow) {
-					// @ts-expect-error
 					const originalFirmwareFileListId = editingFirmwareRow.firmwareFileListId;
-					// @ts-expect-error
 					const originalDocFileListId = editingFirmwareRow.docFileListId;
 
 					if (originalFirmwareFileListId && !existingFirmwareFileListId && !newFirmwareBinFile) {
@@ -812,7 +802,6 @@
 	<div class="rounded-lg border flex flex-col overflow-hidden">
 		<DragDropProvider
 			modifiers={[
-				// @ts-expect-error @dnd-kit/abstract types are botched atm
 				RestrictToVerticalAxis
 			]}
 			onDragEnd={(e) => (data = move(data, e))}
@@ -1020,7 +1009,7 @@
 								firmwareFileListId: data.firmware.firmwareFileListId,
 								docFileName: data.firmware.docFileName,
 								docFileListId: data.firmware.docFileListId
-							} as unknown as Schema;
+							};
 
 							newFirmwareName = data.firmware.name || '';
 							newFirmwareVersion = data.firmware.version || '';

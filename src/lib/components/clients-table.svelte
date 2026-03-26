@@ -230,7 +230,6 @@
 				accessorKey: 'customerName',
 				header: '고객명',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.customerName || row.original.header || '-';
 				}
 			},
@@ -238,7 +237,6 @@
 				accessorKey: 'businessNumber',
 				header: '사업자번호',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.businessNumber || '-';
 				}
 			},
@@ -246,7 +244,6 @@
 				accessorKey: 'phone',
 				header: '연락처',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.phone || '-';
 				}
 			},
@@ -254,7 +251,6 @@
 				accessorKey: 'email',
 				header: '이메일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.email || '-';
 				}
 			},
@@ -262,7 +258,6 @@
 				accessorKey: 'address',
 				header: '주소',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.address || '-';
 				}
 			},
@@ -270,9 +265,7 @@
 				accessorKey: 'registrationFileName',
 				header: '등록증 파일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileName = row.original.registrationFileName;
-					// @ts-expect-error - Schema may not have these fields yet
 					const fileListId = row.original.registrationFileListId;
 
 					if (!fileName || !fileListId) {
@@ -328,43 +321,24 @@
 	function loadEditingRowIntoForm() {
 		if (!editingRow) return;
 
-		// @ts-expect-error
 		newCustomerName = editingRow.name1 || '';
-		// @ts-expect-error
 		newCustomerSource = editingRow.name2 || '';
-		// @ts-expect-error
 		newCustomerItem3 = editingRow.name3 || '';
-		// @ts-expect-error
 		newCustomerItem4 = editingRow.name4 || '';
-		// @ts-expect-error
 		newCustomerItem5 = editingRow.name5 || '';
-		// @ts-expect-error
 		newCustomerBusinessNumber = editingRow.businessNumber || '';
-		// @ts-expect-error
 		newCustomerZipCode = editingRow.zipCode || '';
-		// @ts-expect-error
 		newCustomerAddress = editingRow.address || '';
-		// @ts-expect-error
 		newCustomerFax = editingRow.fax || '';
-		// @ts-expect-error
 		newCustomerMainContactName = editingRow.mainContactName || '';
-		// @ts-expect-error
 		newCustomerMainContactPosition = editingRow.mainContactPosition || '';
-		// @ts-expect-error
 		newCustomerMainContactPhone = editingRow.mainContactPhone || '';
-		// @ts-expect-error
 		newCustomerMainContactEmail = editingRow.mainContactEmail || '';
-		// @ts-expect-error
 		newCustomerSubContactName = editingRow.subContactName || '';
-		// @ts-expect-error
 		newCustomerSubContactPosition = editingRow.subContactPosition || '';
-		// @ts-expect-error
 		newCustomerSubContactPhone = editingRow.subContactPhone || '';
-		// @ts-expect-error
 		newCustomerSubContactEmail = editingRow.subContactEmail || '';
-		// @ts-expect-error
 		existingCustomerRegistrationFileName = editingRow.registrationFileName || null;
-		// @ts-expect-error
 		existingCustomerRegistrationFileListId = editingRow.registrationFileListId || null;
 		newCustomerBizLicenseFile = null;
 	}
@@ -710,7 +684,6 @@
 				formData.set('subContactEmail', newCustomerSubContactEmail || '');
 
 				if (editingRow) {
-					// @ts-expect-error
 					const originalFileListId = editingRow.registrationFileListId;
 					if (
 						originalFileListId &&
@@ -848,7 +821,6 @@
 				formData.set('subContactEmail', newCustomerSubContactEmail || '');
 
 				if (editingClientRow) {
-					// @ts-expect-error
 					const originalFileListId = editingClientRow.registrationFileListId;
 					if (
 						originalFileListId &&
@@ -921,7 +893,6 @@
 	<div class="rounded-lg border flex flex-col overflow-hidden">
 		<DragDropProvider
 			modifiers={[
-				// @ts-expect-error @dnd-kit/abstract types are botched atm
 				RestrictToVerticalAxis
 			]}
 			onDragEnd={(e) => (data = move(data, e))}

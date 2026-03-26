@@ -9,7 +9,7 @@
 		type RowSelectionState,
 		type SortingState
 	} from '@tanstack/table-core';
-	import type { Schema } from './schemas.js';
+	import type { ContractData } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
@@ -102,7 +102,7 @@
 		productList = [],
 		firmwareList = []
 	}: {
-		data: Schema[];
+		data: ContractData[];
 		totalCount?: number;
 		currentPage?: number;
 		pageSize?: number;
@@ -121,7 +121,7 @@
 
 	// --- Form & Dialog State ---
 	let dialogOpen = $state(false);
-	let editingRow = $state<Schema | null>(null);
+	let editingRow = $state<ContractData | null>(null);
 	let validationError = $state<string | null>(null);
 
 	$effect(() => {
@@ -175,7 +175,7 @@
 		if (newUrl) goto(newUrl.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
-	const columns = $derived<ColumnDef<Schema>[]>([
+	const columns = $derived<ColumnDef<ContractData>[]>([
 		{
 			id: 'drag',
 			header: () => null,
@@ -203,7 +203,6 @@
 			accessorKey: 'name',
 			header: '계약명',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.name || '-';
 			}
 		},
@@ -211,7 +210,6 @@
 			accessorKey: 'customerName',
 			header: '고객명',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.customerName || row.original.header || '-';
 			}
 		},
@@ -219,7 +217,6 @@
 			accessorKey: 'phone',
 			header: '연락처',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.phone || '-';
 			}
 		},
@@ -227,7 +224,6 @@
 			accessorKey: 'email',
 			header: '이메일',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.email || '-';
 			}
 		},
@@ -235,7 +231,6 @@
 			accessorKey: 'address',
 			header: '주소',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.address || '-';
 			}
 		},
@@ -248,9 +243,7 @@
 			accessorKey: 'asStatus',
 			header: 'AS상태',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				const status = row.original.asStatus || '없음';
-				// @ts-expect-error
 				const count = row.original.asIncompleteCount || 0;
 				return renderSnippet(DataTableASStatus, { status, count });
 			}
@@ -346,7 +339,7 @@
 
 <div class="flex flex-wrap items-center gap-2 px-4 lg:px-6">
 	<Label for="search-field-selector" class="sr-only">검색 필드</Label>
-	<Select.Root type="single" bind:value={searchField as any}>
+	<Select.Root type="single" bind:value={searchField}>
 		<Select.Trigger class="w-fit" size="sm" id="search-field-selector">
 			{searchableFields.find((f) => f.id === searchField)?.label ?? '검색 필드'}
 		</Select.Trigger>
@@ -483,7 +476,6 @@
 	<div class="rounded-lg border flex flex-col overflow-hidden">
 		<DragDropProvider
 			modifiers={[
-				// @ts-expect-error @dnd-kit/abstract types are botched atm
 				RestrictToVerticalAxis
 			]}
 			onDragEnd={(e) => (data = move(data, e))}
@@ -617,8 +609,8 @@
 	</Button>
 {/snippet}
 
-{#snippet DataTableCustomerStatus({ row }: { row: Row<Schema> })}
-	{@const status = (row.original as any).customerStatus || row.original.status || '-'}
+{#snippet DataTableCustomerStatus({ row }: { row: Row<ContractData> })}
+	{@const status = row.original.customerStatus || row.original.status || '-'}
 	{@const config = {
 		'pre-sales': {
 			text: '사전영업',
@@ -675,7 +667,7 @@
 	</Badge>
 {/snippet}
 
-{#snippet DraggableRow({ row, index }: { row: Row<Schema>; index: number })}
+{#snippet DraggableRow({ row, index }: { row: Row<ContractData>; index: number })}
 	{@const { ref, isDragging, handleRef } = useSortable({
 		id: String(row.original.id),
 		index: () => index

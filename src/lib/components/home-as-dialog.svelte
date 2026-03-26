@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import { getActionError } from './schemas.js';
 	import { tick } from 'svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
@@ -322,8 +323,7 @@
 						await update({ reset: false });
 						await invalidateAll();
 					} else if (result.type === 'failure') {
-						const errorMessage = (result.data as any)?.message ?? 'AS 수정에 실패했습니다.';
-						toast.error(String(errorMessage));
+						toast.error(getActionError(result.data, 'AS 수정에 실패했습니다.'));
 					}
 				};
 			}}

@@ -81,7 +81,7 @@ export function validatePhone(phone: string): boolean {
 export function executeSearch(
 	type: string,
 	searchQuery: string,
-	searchField: string | null,
+	searchField: string | null | undefined,
 	currentUrl: URL
 ): URL | null {
 	if (type !== "products" && type !== "firmware" && type !== "clients" && type !== "contracts" && type !== "as") {

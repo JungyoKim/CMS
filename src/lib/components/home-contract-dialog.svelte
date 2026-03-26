@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { Schema } from './schemas.js';
+	import type { Schema, ContractData, ClientEditData, ProductEditData, FirmwareEditData } from './schemas.js';
+	import { getActionError } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -58,7 +59,7 @@
 
 	let {
 		open = $bindable(false),
-		contract = $bindable<Schema | null>(null),
+		contract = $bindable<ContractData | null>(null),
 		clientList = [],
 		productList = [],
 		firmwareList = [],
@@ -66,7 +67,7 @@
 		updateAction = '?/updateContract'
 	}: {
 		open?: boolean;
-		contract?: Schema | null;
+		contract?: ContractData | null;
 		clientList?: Array<any>;
 		productList?: Array<{ id: number; name: string }>;
 		firmwareList?: Array<{ id: number; name: string }>;
@@ -229,7 +230,7 @@
 	// --- Client Edit Dialog State ---
 	let clientEditDialogOpen = $state(false);
 	let editingClientId = $state<number | null>(null);
-	let editingClientRow = $state<Schema | null>(null);
+	let editingClientRow = $state<ClientEditData | null>(null);
 	let submittingClient = $state(false);
 
 	// --- Client Form State ---
@@ -274,7 +275,7 @@
 	// --- Product Edit Dialog State ---
 	let productEditDialogOpen = $state(false);
 	let editingProductId = $state<number | null>(null);
-	let editingProductRow = $state<Schema | null>(null);
+	let editingProductRow = $state<ProductEditData | null>(null);
 	let loadingProductId = $state<number | null>(null);
 	let submittingProduct = $state(false);
 
@@ -319,7 +320,7 @@
 	// --- Firmware Edit Dialog State ---
 	let firmwareEditDialogOpen = $state(false);
 	let editingFirmwareId = $state<number | null>(null);
-	let editingFirmwareRow = $state<Schema | null>(null);
+	let editingFirmwareRow = $state<FirmwareEditData | null>(null);
 	let loadingFirmwareId = $state<number | null>(null);
 	let submittingFirmware = $state(false);
 
@@ -568,24 +569,19 @@
 	function loadEditingRowIntoForm() {
 		if (!contract) return;
 
-		// @ts-expect-error
 		homeContractName = contract.name || '';
 		homeContractStatus = contract.status || 'active';
-		// @ts-expect-error
 		homeContractDate = stringToDateValue(contract.contractDate);
-		// @ts-expect-error
 		homeContractTerminationDate = stringToDateValue(contract.cancelDate);
-		// @ts-expect-error
 		homeContractPreSalesDate = stringToDateValue(contract.salesStartDate);
-		// @ts-expect-error
 		homeContractAmount = contract.deposit ? formatCurrency(String(contract.deposit)) : '';
-		homeContractDownPayment = (contract as any).prepayment
-			? formatCurrency(String((contract as any).prepayment))
+		homeContractDownPayment = contract.prepayment
+			? formatCurrency(String(contract.prepayment))
 			: '';
 
-		if ((contract as any).interimPaymentsData) {
+		if (contract.interimPaymentsData) {
 			try {
-				const loadedInterim = JSON.parse((contract as any).interimPaymentsData);
+				const loadedInterim = JSON.parse(contract.interimPaymentsData);
 				homeContractInterimPayments = loadedInterim.map((i: any) => ({
 					id: i.id || crypto.randomUUID(),
 					amount: i.amount ? formatCurrency(String(i.amount)) : '',
@@ -602,8 +598,8 @@
 		}
 
 		try {
-			const loadedTaxInvoices = (contract as any).taxInvoicesData
-				? JSON.parse((contract as any).taxInvoicesData)
+			const loadedTaxInvoices = contract.taxInvoicesData
+				? JSON.parse(contract.taxInvoicesData)
 				: [];
 			homeContractTaxInvoices = loadedTaxInvoices.map((inv: any) => ({
 				id: crypto.randomUUID(),
@@ -617,75 +613,46 @@
 			console.error('Failed to parse tax invoices data', e);
 			homeContractTaxInvoices = [];
 		}
-		homeContractMaintenanceAmount = (contract as any).maintenanceMonthlyAmount
-			? formatCurrency(String((contract as any).maintenanceMonthlyAmount))
+		homeContractMaintenanceAmount = contract.maintenanceMonthlyAmount
+			? formatCurrency(String(contract.maintenanceMonthlyAmount))
 			: '';
-		// @ts-expect-error
 		homeContractTaxInvoiceDate = stringToDateValue(contract.taxInvoiceDate);
-		// @ts-expect-error
 		homeContractBillingDate = contract.billingDayOfMonth ? String(contract.billingDayOfMonth) : '';
-		// @ts-expect-error
 		homeContractManagerName = contract.managerName || '';
-		// @ts-expect-error
 		homeContractManagerPhone = contract.managerPhone || '';
-		// @ts-expect-error
 		homeContractManagerEmail = contract.managerEmail || '';
-		// @ts-expect-error
 		homeContractConstructionStartDate = stringToDateValue(contract.buildStartDate);
-		// @ts-expect-error
 		homeContractConstructionEndDate = stringToDateValue(contract.buildEndDate);
-		// @ts-expect-error
 		homeContractInstallPartner = contract.installerCompany || '';
-		// @ts-expect-error
 		homeContractInstallName = contract.installerName || '';
-		// @ts-expect-error
 		homeContractInstallPhone = contract.installerPhone || '';
-		homeContractTaxInvoiceAmount = (contract as any).taxInvoiceAmount
-			? formatCurrency(String((contract as any).taxInvoiceAmount))
+		homeContractTaxInvoiceAmount = contract.taxInvoiceAmount
+			? formatCurrency(String(contract.taxInvoiceAmount))
 			: '';
-		// @ts-expect-error
 		homeContractTaxInvoiceIssueDate = stringToDateValue(contract.taxInvoiceIssueDate);
-		// @ts-expect-error
 		homeContractTaxInvoiceDepositDate = stringToDateValue(contract.taxInvoiceDepositDate);
-		// @ts-expect-error
 		homeContractBuildingInfo = contract.buildingInfo || '';
-		// @ts-expect-error
 		homeContractCustomerMemo = contract.customerMemo || '';
 
 		// Customers
-		// @ts-expect-error
 		homeContractCustomer = contract.clientId ? String(contract.clientId) : '';
-		// @ts-expect-error
 		homeContractOrderer = contract.orderClientId ? String(contract.orderClientId) : '';
-		// @ts-expect-error
 		homeContractCustomerContact = contract.customerContactName || '';
-		// @ts-expect-error
 		homeContractCustomerPosition = contract.customerContactPosition || '';
-		// @ts-expect-error
 		homeContractCustomerPhone = contract.customerContactPhone || '';
-		// @ts-expect-error
 		homeContractCustomerEmail = contract.customerContactEmail || '';
-		// @ts-expect-error
 		homeContractCustomerAddress = contract.customerAddress || '';
-		// @ts-expect-error
 		homeContractOrdererContact = contract.ordererContactName || '';
-		// @ts-expect-error
 		homeContractOrdererPosition = contract.ordererContactPosition || '';
-		// @ts-expect-error
 		homeContractOrdererPhone = contract.ordererContactPhone || '';
-		// @ts-expect-error
 		homeContractOrdererEmail = contract.ordererContactEmail || '';
-		// @ts-expect-error
 		homeContractOrdererAddress = contract.ordererAddress || '';
 
 		// Attachment
-		// @ts-expect-error
 		existingContractAttachmentFileName = contract.attachmentFileName || null;
-		// @ts-expect-error
 		existingContractAttachmentFileListId = contract.attachmentFileListId || null;
 
 		// Nested Data
-		// @ts-expect-error
 		const roomsData = contract.roomsData || [];
 		contractRooms = roomsData.map((room: any, index: number) => ({
 			id: `room-${index}`,
@@ -696,7 +663,6 @@
 			memo: room.memo || ''
 		}));
 
-		// @ts-expect-error
 		const repeatersData = contract.repeatersData || [];
 		contractRepeaters = repeatersData.map((repeater: any, index: number) => ({
 			id: `repeater-${index}`,
@@ -706,7 +672,6 @@
 			memo: repeater.memo || ''
 		}));
 
-		// @ts-expect-error
 		const installProductsData = contract.installProductsData || [];
 		contractDeliveryProducts = installProductsData.map((product: any, index: number) => ({
 			id: `product-${index}`,
@@ -719,7 +684,6 @@
 			openFirmware: false
 		}));
 
-		// @ts-expect-error
 		const asRecordsData = contract.asRecordsData || [];
 		contractASRecords = asRecordsData.map((record: any, index: number) => ({
 			id: `as-${index}`,
@@ -737,7 +701,6 @@
 			fileListId: record.fileListId || null
 		}));
 
-		// @ts-expect-error
 		const documentsData = contract.documentsData || [];
 		contractDocuments = documentsData.map((doc: any, index: number) => ({
 			checked: false,
@@ -1030,11 +993,11 @@
 				formData.set('status', homeContractStatus);
 				formData.set(
 					'clientId',
-					homeContractCustomer || (contract ? String((contract as any).clientId) : '')
+					homeContractCustomer || (contract ? String(contract.clientId) : '')
 				);
 				formData.set(
 					'orderClientId',
-					homeContractOrderer || (contract ? String((contract as any).orderClientId) : '')
+					homeContractOrderer || (contract ? String(contract.orderClientId) : '')
 				);
 
 				// Dates & Amounts
@@ -1139,7 +1102,6 @@
 					if (doc.file) formData.set(`documentFile_${index}`, doc.file);
 				});
 
-				// @ts-expect-error
 				const originalFileListId = contract?.attachmentFileListId;
 				if (
 					originalFileListId &&
@@ -1168,7 +1130,7 @@
 
 						// resetForm()과 contract = null은 onOpenChange에서 setTimeout으로 처리됨
 					} else if (result.type === 'failure') {
-						toast.error((result.data as any)?.message || '작업 실패');
+						toast.error(getActionError(result.data, '작업 실패'));
 					}
 				};
 			}}
@@ -1310,7 +1272,7 @@
 																		subContactPhone: selectedClient.subContactPhone || '',
 																		subContactEmail: selectedClient.subContactEmail || '',
 																		name: name
-																	} as unknown as Schema;
+																	};
 
 																	newCustomerName = selectedClient.name1 || '';
 																	newCustomerSource = selectedClient.name2 || '';
@@ -1547,7 +1509,7 @@
 																		subContactPhone: selectedClient.subContactPhone || '',
 																		subContactEmail: selectedClient.subContactEmail || '',
 																		name: name
-																	} as unknown as Schema;
+																	};
 
 																	newCustomerName = selectedClient.name1 || '';
 																	newCustomerSource = selectedClient.name2 || '';
@@ -1786,7 +1748,6 @@
 				<DragDropProvider
 					onDragEnd={(e) => (homeContractInterimPayments = move(homeContractInterimPayments, e))}
 					modifiers={[
-						// @ts-expect-error
 						RestrictToVerticalAxis
 					]}
 				>
@@ -1874,7 +1835,6 @@
 				<DragDropProvider
 					onDragEnd={(e) => (homeContractTaxInvoices = move(homeContractTaxInvoices, e))}
 					modifiers={[
-						// @ts-expect-error
 						RestrictToVerticalAxis
 					]}
 				>
@@ -2274,7 +2234,6 @@
 									<DragDropProvider
 										onDragEnd={(e) => (contractRooms = move(contractRooms, e))}
 										modifiers={[
-											// @ts-expect-error @dnd-kit/abstract types are botched atm
 											RestrictToVerticalAxis
 										]}
 									>
@@ -2390,7 +2349,6 @@
 									<DragDropProvider
 										onDragEnd={(e) => (contractRepeaters = move(contractRepeaters, e))}
 										modifiers={[
-											// @ts-expect-error @dnd-kit/abstract types are botched atm
 											RestrictToVerticalAxis
 										]}
 									>
@@ -2515,7 +2473,6 @@
 								<DragDropProvider
 									onDragEnd={(e) => (contractDeliveryProducts = move(contractDeliveryProducts, e))}
 									modifiers={[
-										// @ts-expect-error @dnd-kit/abstract types are botched atm
 										RestrictToVerticalAxis
 									]}
 								>
@@ -2757,10 +2714,7 @@
 													e.preventDefault();
 													e.stopImmediatePropagation();
 													if (record.fileListId) {
-														downloadFile({
-															name: record.fileName!,
-															fileListId: record.fileListId
-														} as any);
+														window.open(`/api/files/${record.fileListId}`, '_blank');
 													}
 												}}
 											>
@@ -2860,7 +2814,6 @@
 				<DragDropProvider
 					onDragEnd={(e) => (contractDocuments = move(contractDocuments, e))}
 					modifiers={[
-						// @ts-expect-error @dnd-kit/abstract types are botched atm
 						RestrictToVerticalAxis
 					]}
 				>
@@ -3204,7 +3157,7 @@
 																	protocolId: data.product.protocolId,
 																	photoFileName: data.product.photoFileName,
 																	photoFileListId: data.product.photoFileListId
-																} as unknown as Schema;
+																};
 
 																newProductName = data.product.name || '';
 																newProductCode = data.product.code || '';
@@ -3339,7 +3292,7 @@
 																	firmwareFileListId: data.firmware.firmwareFileListId,
 																	docFileName: data.firmware.docFileName,
 																	docFileListId: data.firmware.docFileListId
-																} as unknown as Schema;
+																};
 
 																newFirmwareName = data.firmware.name || '';
 																newFirmwareVersion = data.firmware.version || '';
@@ -3532,7 +3485,7 @@
 
 				if (editingClientRow) {
 					// Use editingClientId (set when loading) or fallback to clientId from API response
-					formData.set('id', String(editingClientId || (editingClientRow as any).clientId));
+					formData.set('id', String(editingClientId || editingClientRow?.clientId));
 				}
 
 				formData.set('name1', newCustomerName || '');
@@ -3554,7 +3507,7 @@
 				formData.set('subContactEmail', newCustomerSubContactEmail || '');
 
 				if (editingClientRow) {
-					const originalFileListId = (editingClientRow as any).registrationFileListId;
+					const originalFileListId = editingClientRow?.registrationFileListId;
 					if (
 						originalFileListId &&
 						!existingCustomerRegistrationFileListId &&
@@ -3619,9 +3572,10 @@
 						toast.success('고객사가 수정되었습니다.');
 					} else if (result.type === 'failure') {
 						const wasEditing = editingClientRow !== null;
-						const errorMessage =
-							(result.data as any)?.message ||
-							(wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.');
+						const errorMessage = getActionError(
+							result.data,
+							wasEditing ? '수정에 실패했습니다.' : '추가에 실패했습니다.'
+						);
 						toast.error(errorMessage);
 						console.error('Form action failed:', result);
 					}
@@ -4050,7 +4004,7 @@
 																			firmwareFileListId: data.firmware.firmwareFileListId,
 																			docFileName: data.firmware.docFileName,
 																			docFileListId: data.firmware.docFileListId
-																		} as unknown as Schema;
+																		};
 
 																		newFirmwareName = data.firmware.name || '';
 																		newFirmwareVersion = data.firmware.version || '';
@@ -4728,9 +4682,7 @@
 				}
 
 				if (editingFirmwareRow) {
-					// @ts-expect-error
 					const originalFirmwareFileListId = editingFirmwareRow.firmwareFileListId;
-					// @ts-expect-error
 					const originalDocFileListId = editingFirmwareRow.docFileListId;
 
 					if (originalFirmwareFileListId && !existingFirmwareFileListId && !newFirmwareBinFile) {
@@ -4763,8 +4715,7 @@
 						await tick();
 						toast.success('펌웨어가 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = (result.data as any)?.message || '수정에 실패했습니다.';
-						toast.error(errorMessage);
+						toast.error(getActionError(result.data, '수정에 실패했습니다.'));
 					}
 				};
 			}}
@@ -4843,7 +4794,6 @@
 				}
 
 				if (editingProductRow) {
-					// @ts-expect-error
 					const originalFileListId = editingProductRow.photoFileListId;
 					if (originalFileListId && !existingProductFileListId && !newProductFile) {
 						formData.set('removeProductFile', 'true');
@@ -4883,8 +4833,7 @@
 						await tick();
 						toast.success('제품이 수정되었습니다.');
 					} else if (result.type === 'failure') {
-						const errorMessage = (result.data as any)?.message || '수정에 실패했습니다.';
-						toast.error(errorMessage);
+						toast.error(getActionError(result.data, '수정에 실패했습니다.'));
 					}
 				};
 			}}

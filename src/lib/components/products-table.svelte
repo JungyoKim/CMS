@@ -13,7 +13,7 @@
 		type SortingState,
 		type VisibilityState
 	} from '@tanstack/table-core';
-	import type { Schema } from './schemas.js';
+	import type { Schema, FirmwareEditData } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
@@ -126,7 +126,7 @@
 	let loadingFirmwareId = $state<number | null>(null);
 	let firmwareEditDialogOpen = $state(false);
 	let editingFirmwareId = $state<number | null>(null);
-	let editingFirmwareRow = $state<Schema | null>(null);
+	let editingFirmwareRow = $state<FirmwareEditData | null>(null);
 	let submittingFirmware = $state(false);
 
 	// Firmware Form State
@@ -250,25 +250,16 @@
 	function loadEditingRowIntoForm() {
 		if (!editingRow) return;
 
-		// @ts-expect-error - Schema fields
 		newProductName = editingRow.productName || '';
-		// @ts-expect-error
 		newProductCode = editingRow.productCode || '';
-		// @ts-expect-error
 		newProductVersion = editingRow.version || '';
-		// @ts-expect-error
 		newProductPrice = editingRow.price ? String(editingRow.price) : '';
-		// @ts-expect-error
 		newProductDescription = editingRow.memo || '';
-		// @ts-expect-error
 		newProductFirmwareId = editingRow.protocolId ? String(editingRow.protocolId) : '';
-		// @ts-expect-error
 		existingProductFileName = editingRow.photoFileName || null;
-		// @ts-expect-error
 		existingProductFileListId = editingRow.photoFileListId || null;
 		newProductFile = null;
 
-		// @ts-expect-error
 		const inventoryData = editingRow.inventoryData || [];
 		productInventory = inventoryData.map((inv: any) => ({
 			id: Math.random().toString(),
@@ -357,7 +348,6 @@
 			accessorKey: 'productName',
 			header: '제품명',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.productName || row.original.header || '-';
 			}
 		},
@@ -365,7 +355,6 @@
 			accessorKey: 'productCode',
 			header: '관리코드',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.productCode || '-';
 			}
 		},
@@ -373,7 +362,6 @@
 			accessorKey: 'protocolId',
 			header: '펌웨어',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				const protocolId = row.original.protocolId;
 				if (!protocolId) return '-';
 				const firmware = firmwareList.find((f) => String(f.id) === String(protocolId));
@@ -384,7 +372,6 @@
 			accessorKey: 'price',
 			header: '단가',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				const price = row.original.price;
 				return price
 					? typeof price === 'number'
@@ -397,7 +384,6 @@
 			accessorKey: 'memo',
 			header: '메모',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				return row.original.memo || '-';
 			}
 		},
@@ -405,7 +391,6 @@
 			accessorKey: 'totalQuantity',
 			header: '재고',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				const totalQuantity = row.original.totalQuantity;
 				return totalQuantity !== undefined ? totalQuantity.toLocaleString() + '개' : '0개';
 			}
@@ -414,9 +399,7 @@
 			accessorKey: 'photoFileName',
 			header: '파일명',
 			cell: ({ row }) => {
-				// @ts-expect-error
 				const fileName = row.original.photoFileName;
-				// @ts-expect-error
 				const fileListId = row.original.photoFileListId;
 
 				if (!fileName || !fileListId) return '-';
@@ -703,7 +686,6 @@
 
 						if (editingRow) {
 							formData.set('id', String(editingRow.id));
-							// @ts-expect-error
 							const originalFileListId = editingRow.photoFileListId;
 							if (originalFileListId && !existingProductFileListId && !newProductFile) {
 								formData.set('removeProductFile', 'true');
@@ -791,7 +773,6 @@
 	<div class="rounded-lg border flex flex-col overflow-hidden">
 		<DragDropProvider
 			modifiers={[
-				// @ts-expect-error @dnd-kit/abstract types are botched atm
 				RestrictToVerticalAxis
 			]}
 			onDragEnd={(e) => (data = move(data, e))}
@@ -1086,7 +1067,7 @@
 																		firmwareFileListId: data.firmware.firmwareFileListId,
 																		docFileName: data.firmware.docFileName,
 																		docFileListId: data.firmware.docFileListId
-																	} as unknown as Schema;
+																	};
 
 																	newFirmwareName = data.firmware.name || '';
 																	newFirmwareVersion = data.firmware.version || '';
@@ -1410,9 +1391,7 @@
 				}
 
 				if (editingFirmwareRow) {
-					// @ts-expect-error
 					const originalFirmwareFileListId = editingFirmwareRow.firmwareFileListId;
-					// @ts-expect-error
 					const originalDocFileListId = editingFirmwareRow.docFileListId;
 
 					if (originalFirmwareFileListId && !existingFirmwareFileListId && !newFirmwareBinFile) {

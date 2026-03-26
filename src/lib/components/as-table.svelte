@@ -1300,7 +1300,6 @@
 	<div class="rounded-lg border flex flex-col overflow-hidden">
 		<DragDropProvider
 			modifiers={[
-				// @ts-expect-error @dnd-kit/abstract types are botched atm
 				RestrictToVerticalAxis
 			]}
 			onDragEnd={(e) => {

@@ -8,7 +8,7 @@
 		type Row,
 		type SortingState
 	} from '@tanstack/table-core';
-	import type { Schema } from './schemas.js';
+	import type { Schema, ProductEditData } from './schemas.js';
 	import type { Attachment } from 'svelte/attachments';
 	import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
 	import { createSvelteTable } from '$lib/components/ui/data-table/data-table.svelte.js';
@@ -235,7 +235,7 @@
 	// 제품 수정 관련 상태
 	let productEditDialogOpen = $state(false);
 	let editingProductId = $state<number | null>(null);
-	let editingProductRow = $state<Schema | null>(null);
+	let editingProductRow = $state<ProductEditData | null>(null);
 	let loadingProductId = $state<number | null>(null);
 	let submittingProduct = $state(false);
 
@@ -298,7 +298,6 @@
 				accessorKey: 'customerName',
 				header: '고객명',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.customerName || '-';
 				}
 			},
@@ -306,7 +305,6 @@
 				accessorKey: 'requestDate',
 				header: '요청일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.requestDate || '-';
 				}
 			},
@@ -314,7 +312,6 @@
 				accessorKey: 'requestContent',
 				header: '내용',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.requestContent || '-';
 				}
 			},
@@ -322,7 +319,6 @@
 				accessorKey: 'responseContent',
 				header: '대응내역',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.responseContent || '-';
 				}
 			},
@@ -330,7 +326,6 @@
 				accessorKey: 'responseDate',
 				header: '처리일',
 				cell: ({ row }) => {
-					// @ts-expect-error - Schema may not have these fields yet
 					return row.original.responseDate || '-';
 				}
 			}
@@ -688,76 +683,41 @@
 	$effect(() => {
 		if (homeContractEditingRow) {
 			const row = homeContractEditingRow;
-			// @ts-expect-error - Schema may not have these fields
 			homeContractName = row.name || '';
 			homeContractStatus = (row.status as string) || 'active';
-			// @ts-expect-error
 			homeContractDate = stringToDateValue(row.contractDate);
-			// @ts-expect-error
 			homeContractTerminationDate = stringToDateValue(row.cancelDate);
-			// @ts-expect-error
 			homeContractPreSalesDate = stringToDateValue(row.salesStartDate);
-			// @ts-expect-error
 			homeContractAmount = row.deposit ? formatCurrency(String(row.deposit)) : '';
-			// @ts-expect-error
 			homeContractDownPayment = row.prepayment ? formatCurrency(String(row.prepayment)) : '';
-			// @ts-expect-error
-			homeContractInterimPayment = row.interimPayment ? formatCurrency(String((row as any).interimPayment)) : '';
-			// @ts-expect-error
+			homeContractInterimPayment = row.interimPayment ? formatCurrency(String(row.interimPayment)) : '';
 			homeContractTaxInvoiceDate = stringToDateValue(row.taxInvoiceDate);
-			// @ts-expect-error
-			homeContractMaintenanceAmount = row.maintenanceMonthlyAmount ? formatCurrency(String((row as any).maintenanceMonthlyAmount)) : '';
-			// @ts-expect-error
+			homeContractMaintenanceAmount = row.maintenanceMonthlyAmount ? formatCurrency(String(row.maintenanceMonthlyAmount)) : '';
 			homeContractBillingDate = row.billingDayOfMonth || '';
-			// @ts-expect-error
 			homeContractManagerName = row.managerName || '';
-			// @ts-expect-error
 			homeContractManagerPosition = row.managerPosition || '';
-			// @ts-expect-error
 			homeContractManagerPhone = row.managerPhone || '';
-			// @ts-expect-error
 			homeContractManagerEmail = row.managerEmail || '';
-			// @ts-expect-error
 			homeContractConstructionStartDate = stringToDateValue(row.buildStartDate);
-			// @ts-expect-error
 			homeContractConstructionEndDate = stringToDateValue(row.buildEndDate);
-			// @ts-expect-error
 			homeContractInstallPartner = row.installerCompany || '';
-			// @ts-expect-error
 			homeContractInstallName = row.installerName || '';
-			// @ts-expect-error
 			homeContractInstallPhone = row.installerPhone || '';
-			// @ts-expect-error
 			homeContractBuildingInfo = row.buildingInfo || '';
-			// @ts-expect-error
 			homeContractCustomer = row.clientId ? String(row.clientId) : '';
-			// @ts-expect-error
 			homeContractOrderer = row.orderClientId ? String(row.orderClientId) : '';
-			// @ts-expect-error
 			homeContractCustomerContact = row.customerContactName || '';
-			// @ts-expect-error
 			homeContractCustomerPosition = row.customerContactPosition || '';
-			// @ts-expect-error
 			homeContractCustomerPhone = row.customerContactPhone || '';
-			// @ts-expect-error
 			homeContractCustomerEmail = row.customerContactEmail || '';
-			// @ts-expect-error
 			homeContractCustomerAddress = row.customerAddress || '';
-			// @ts-expect-error
 			homeContractOrdererContact = row.ordererContactName || '';
-			// @ts-expect-error
 			homeContractOrdererPosition = row.ordererContactPosition || '';
-			// @ts-expect-error
 			homeContractOrdererPhone = row.ordererContactPhone || '';
-			// @ts-expect-error
 			homeContractOrdererEmail = row.ordererContactEmail || '';
-			// @ts-expect-error
 			homeContractOrdererAddress = row.ordererAddress || '';
-			// @ts-expect-error
 			existingHomeContractAttachmentFileName = row.attachmentFileName || null;
-			// @ts-expect-error
 			existingHomeContractAttachmentFileListId = row.attachmentFileListId || null;
-			// @ts-expect-error
 			homeContractRooms = (row.roomsData || []).map((room: any) => ({
 				id: Math.random().toString(),
 				checked: false,
@@ -766,7 +726,6 @@
 				roomId: room.roomId || '',
 				memo: room.memo || ''
 			}));
-			// @ts-expect-error
 			homeContractRepeaters = (row.repeatersData || []).map((repeater: any) => ({
 				id: Math.random().toString(),
 				checked: false,
@@ -774,7 +733,6 @@
 				room: repeater.room || '',
 				memo: repeater.memo || ''
 			}));
-			// @ts-expect-error
 			homeContractDeliveryProducts = (row.installProductsData || []).map((product: any) => ({
 				id: Math.random().toString(),
 				checked: false,
@@ -785,7 +743,6 @@
 				openProduct: false,
 				openFirmware: false
 			}));
-			// @ts-expect-error
 			homeContractASRecords = (row.asRecordsData || []).map((record: any) => ({
 				id: Math.random().toString(),
 				requestDate: stringToDateValue(record.requestDate),
@@ -798,7 +755,6 @@
 				requestDateOpen: false,
 				responseDateOpen: false
 			}));
-			// @ts-expect-error
 			homeContractDocuments = (row.documentsData || []).map((doc: any) => ({
 				id: Math.random().toString(),
 				content: doc.content || '',
@@ -848,7 +804,6 @@
 			if (homeASDialogOpen) {
 				return;
 			}
-			// @ts-expect-error - Schema may not have asId field
 			const asId = row.original.asId || row.original.id;
 			if (asId) {
 				// AS 데이터를 가져와서 홈 화면용 수정 dialog 열기
@@ -888,7 +843,6 @@
 <div class="rounded-lg border flex flex-col md:h-full md:min-h-0 overflow-hidden">
 	<DragDropProvider
 		modifiers={[
-			// @ts-expect-error @dnd-kit/abstract types are botched atm
 			RestrictToVerticalAxis
 		]}
 		onDragEnd={(e) => (data = move(data, e))}
@@ -1172,7 +1126,7 @@
 																protocolId: data.product.protocolId,
 																photoFileName: data.product.photoFileName,
 																photoFileListId: data.product.photoFileListId
-															} as unknown as Schema;
+															};
 
 															newProductName = data.product.name || '';
 															newProductCode = data.product.code || '';
@@ -1909,7 +1863,6 @@
 									<DragDropProvider
 										onDragEnd={(e) => (homeContractRooms = move(homeContractRooms, e))}
 										modifiers={[
-											// @ts-expect-error @dnd-kit/abstract types are botched atm
 											RestrictToVerticalAxis
 										]}
 									>
@@ -2028,7 +1981,6 @@
 									<DragDropProvider
 										onDragEnd={(e) => (homeContractRepeaters = move(homeContractRepeaters, e))}
 										modifiers={[
-											// @ts-expect-error @dnd-kit/abstract types are botched atm
 											RestrictToVerticalAxis
 										]}
 									>
@@ -2159,7 +2111,6 @@
 									onDragEnd={(e) =>
 										(homeContractDeliveryProducts = move(homeContractDeliveryProducts, e))}
 									modifiers={[
-										// @ts-expect-error @dnd-kit/abstract types are botched atm
 										RestrictToVerticalAxis
 									]}
 								>
@@ -2402,7 +2353,6 @@
 				<DragDropProvider
 					onDragEnd={(e) => (homeContractDocuments = move(homeContractDocuments, e))}
 					modifiers={[
-						// @ts-expect-error @dnd-kit/abstract types are botched atm
 						RestrictToVerticalAxis
 					]}
 				>
